@@ -11,6 +11,12 @@
 
     {% if booking.converted_to_appointment %}
         <div class="alert alert-info">This booking is already on the calendar. You can modify the appointment from here.</div>
+    {% elif booking.status == 'pending' %}
+        <form class="action-bar" method="post">
+            {% csrf_token %}
+            <span class="week-title">Ready to add this request to the appointment calendar.</span>
+            <button class="btn btn-primary primary-action" type="submit" name="action" value="confirm">Agregar al calendario</button>
+        </form>
     {% endif %}
 
     <section class="settings-section">
