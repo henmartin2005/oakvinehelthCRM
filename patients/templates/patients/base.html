@@ -115,7 +115,10 @@
         .week-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .week-title { color: var(--muted); font-weight: 800; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); gap: 12px; }
+        .calendar-day-grid { grid-template-columns: minmax(260px, 520px); }
+        .calendar-month-grid .calendar-day { min-height: 170px; }
         .calendar-day { min-height: 280px; padding: 12px; }
+        .calendar-muted { opacity: .45; }
         .calendar-date { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
         .calendar-date strong { font-size: 14px; }
         .calendar-date span { color: var(--muted); font-size: 12px; font-weight: 800; }

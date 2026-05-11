@@ -1,4 +1,5 @@
 import json
+import calendar
 from datetime import datetime, timedelta
 
 from django.contrib import messages
@@ -53,6 +54,111 @@ def booking_visit_type_to_appointment(value):
 
 def start_of_week(day):
     return day - timedelta(days=day.weekday())
+
+
+def find_existing_patient(phone='', email=''):
+    patient = None
+    if phone:
+        patient = Patient.objects.filter(phone=phone).first()
+    if not patient and email:
+        patient = Patient.objects.filter(email=email).first()
+    return patient
+
+
+def create_or_update_patient_from_booking(data):
+    phone = data.get('phone', '')
+    email = data.get('email', '')
+    patient = find_existing_patient(phone=phone, email=email)
+
+    if not patient:
+        return Patient.objects.create(
+            first_name=data.get('first_name', ''),
+            last_name=data.get('last_name', ''),
+            date_of_birth=data.get('date_of_birth') or None,
+            phone=phone,
+            email=email,
+            language=data.get('language', Patient.LANGUAGE_SPANISH),
+            payment_type=Patient.PAYMENT_CASH,
+        )
+
+    changed = False
+    for field in ['first_name', 'last_name', 'phone', 'email', 'language']:
+        value = data.get(field)
+        if value and not getattr(patient, field):
+            setattr(patient, field, value)
+            changed = True
+    if data.get('date_of_birth') and not patient.date_of_birth:
+        patient.date_of_birth = data.get('date_of_birth')
+        changed = True
+    if changed:
+        patient.save()
+    return patient
+
+
+def build_booking_calendar(view_mode, selected_day):
+    if view_mode == 'day':
+        period_start = selected_day
+        period_end = selected_day
+        days = [selected_day]
+        previous_period = selected_day - timedelta(days=1)
+        next_period = selected_day + timedelta(days=1)
+        period_label = selected_day.strftime('%B %d, %Y')
+        calendar_class = 'calendar-grid calendar-day-grid'
+    elif view_mode == 'month':
+        month_calendar = calendar.Calendar(firstweekday=0).monthdatescalendar(
+            selected_day.year,
+            selected_day.month,
+        )
+        days = [day for week in month_calendar for day in week]
+        period_start = days[0]
+        period_end = days[-1]
+        if selected_day.month == 1:
+            previous_period = selected_day.replace(year=selected_day.year - 1, month=12, day=1)
+        else:
+            previous_period = selected_day.replace(month=selected_day.month - 1, day=1)
+        if selected_day.month == 12:
+            next_period = selected_day.replace(year=selected_day.year + 1, month=1, day=1)
+        else:
+            next_period = selected_day.replace(month=selected_day.month + 1, day=1)
+        period_label = selected_day.strftime('%B %Y')
+        calendar_class = 'calendar-grid calendar-month-grid'
+    else:
+        period_start = start_of_week(selected_day)
+        days = [period_start + timedelta(days=offset) for offset in range(7)]
+        period_end = days[-1]
+        previous_period = period_start - timedelta(days=7)
+        next_period = period_start + timedelta(days=7)
+        period_label = f'{period_start.strftime("%b %d")} - {period_end.strftime("%b %d, %Y")}'
+        calendar_class = 'calendar-grid'
+
+    appointments = Appointment.objects.select_related('patient').filter(
+        date__range=(period_start, period_end),
+    ).order_by('date', 'time')
+    pending_bookings = BookingRequest.objects.filter(
+        requested_date__range=(period_start, period_end),
+        status='pending',
+    ).order_by('requested_date', 'requested_time')
+
+    calendar_days = []
+    for day in days:
+        calendar_days.append(
+            {
+                'date': day,
+                'is_current_month': day.month == selected_day.month,
+                'appointments': [appointment for appointment in appointments if appointment.date == day],
+                'bookings': [booking for booking in pending_bookings if booking.requested_date == day],
+            }
+        )
+
+    return {
+        'calendar_days': calendar_days,
+        'period_start': period_start,
+        'period_end': period_end,
+        'previous_period': previous_period,
+        'next_period': next_period,
+        'period_label': period_label,
+        'calendar_class': calendar_class,
+    }
 
 
 def api_booking_config(request):
@@ -122,6 +228,7 @@ def api_book_appointment(request):
                     status=400,
                 )
 
+        patient = create_or_update_patient_from_booking(data)
         booking = BookingRequest.objects.create(
             first_name=data.get('first_name'),
             last_name=data.get('last_name'),
@@ -142,6 +249,7 @@ def api_book_appointment(request):
                 'success': True,
                 'message': 'Booking request received successfully',
                 'booking_id': booking.id,
+                'patient_id': patient.id,
             },
             status=201,
         )
@@ -341,48 +449,28 @@ def payment_update_view(request, pk):
 @login_required
 def booking_requests_view(request):
     view_mode = request.GET.get('view', 'list')
+    if view_mode == 'calendar':
+        view_mode = 'week'
     bookings = BookingRequest.objects.all().order_by('-created_at')
     status_filter = request.GET.get('status', '')
     if status_filter:
         bookings = bookings.filter(status=status_filter)
 
-    week_value = request.GET.get('week', '')
+    date_value = request.GET.get('date') or request.GET.get('week', '')
     try:
-        selected_day = datetime.strptime(week_value, '%Y-%m-%d').date() if week_value else timezone.localdate()
+        selected_day = datetime.strptime(date_value, '%Y-%m-%d').date() if date_value else timezone.localdate()
     except ValueError:
         selected_day = timezone.localdate()
-    week_start = start_of_week(selected_day)
-    week_days = [week_start + timedelta(days=offset) for offset in range(7)]
-    week_end = week_days[-1]
-    appointments = Appointment.objects.select_related('patient').filter(
-        date__range=(week_start, week_end),
-    ).order_by('date', 'time')
-    pending_week_bookings = BookingRequest.objects.filter(
-        requested_date__range=(week_start, week_end),
-        status='pending',
-    ).order_by('requested_date', 'requested_time')
-
-    calendar_days = []
-    for day in week_days:
-        calendar_days.append(
-            {
-                'date': day,
-                'appointments': [appointment for appointment in appointments if appointment.date == day],
-                'bookings': [booking for booking in pending_week_bookings if booking.requested_date == day],
-            }
-        )
+    calendar_context = build_booking_calendar(view_mode, selected_day)
 
     context = {
         'bookings': bookings,
         'pending_count': BookingRequest.objects.filter(status='pending').count(),
         'status_filter': status_filter,
         'view_mode': view_mode,
-        'calendar_days': calendar_days,
-        'week_start': week_start,
-        'week_end': week_end,
-        'previous_week': week_start - timedelta(days=7),
-        'next_week': week_start + timedelta(days=7),
+        'selected_day': selected_day,
     }
+    context.update(calendar_context)
     return render(request, 'patients/booking_requests.html', context)
 
 
@@ -390,7 +478,7 @@ def booking_requests_view(request):
 def booking_confirm_view(request, pk):
     """Convert a booking request into a real appointment."""
     booking = get_object_or_404(BookingRequest, pk=pk)
-    existing_patient = Patient.objects.filter(phone=booking.phone).first()
+    existing_patient = find_existing_patient(phone=booking.phone, email=booking.email)
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -398,13 +486,15 @@ def booking_confirm_view(request, pk):
         if action == 'confirm':
             patient = existing_patient
             if not patient:
-                patient = Patient.objects.create(
-                    first_name=booking.first_name,
-                    last_name=booking.last_name,
-                    date_of_birth=booking.date_of_birth,
-                    phone=booking.phone,
-                    email=booking.email,
-                    language=booking.language,
+                patient = create_or_update_patient_from_booking(
+                    {
+                        'first_name': booking.first_name,
+                        'last_name': booking.last_name,
+                        'date_of_birth': booking.date_of_birth,
+                        'phone': booking.phone,
+                        'email': booking.email,
+                        'language': booking.language,
+                    }
                 )
 
             time_obj = datetime.strptime(booking.requested_time, '%H:%M').time()

@@ -9,24 +9,26 @@
 <div class="view-switch">
     <nav class="tabs">
         <a class="page-link {% if view_mode == 'list' %}active{% endif %}" href="/bookings/?view=list">List View</a>
-        <a class="page-link {% if view_mode == 'calendar' %}active{% endif %}" href="/bookings/?view=calendar">Calendar Week</a>
+        <a class="page-link {% if view_mode == 'day' %}active{% endif %}" href="/bookings/?view=day">Day</a>
+        <a class="page-link {% if view_mode == 'week' %}active{% endif %}" href="/bookings/?view=week">Week</a>
+        <a class="page-link {% if view_mode == 'month' %}active{% endif %}" href="/bookings/?view=month">Month</a>
     </nav>
-    {% if view_mode == 'calendar' %}
+    {% if view_mode != 'list' %}
         <div class="week-nav">
-            <a class="btn btn-outline-muted" href="/bookings/?view=calendar&week={{ previous_week|date:'Y-m-d' }}">Previous week</a>
-            <span class="week-title">{{ week_start|date:"M j" }} - {{ week_end|date:"M j, Y" }}</span>
-            <a class="btn btn-outline-muted" href="/bookings/?view=calendar&week={{ next_week|date:'Y-m-d' }}">Next week</a>
+            <a class="btn btn-outline-muted" href="/bookings/?view={{ view_mode }}&date={{ previous_period|date:'Y-m-d' }}">Previous</a>
+            <span class="week-title">{{ period_label }}</span>
+            <a class="btn btn-outline-muted" href="/bookings/?view={{ view_mode }}&date={{ next_period|date:'Y-m-d' }}">Next</a>
         </div>
     {% endif %}
 </div>
 
-{% if view_mode == 'calendar' %}
-    <section class="calendar-grid">
+{% if view_mode != 'list' %}
+    <section class="{{ calendar_class }}">
         {% for day in calendar_days %}
-            <div class="card calendar-day">
+            <div class="card calendar-day {% if view_mode == 'month' and not day.is_current_month %}calendar-muted{% endif %}">
                 <div class="calendar-date">
-                    <strong>{{ day.date|date:"D" }}</strong>
-                    <span>{{ day.date|date:"M j" }}</span>
+                    <strong>{% if view_mode == 'month' %}{{ day.date|date:"j" }}{% else %}{{ day.date|date:"D" }}{% endif %}</strong>
+                    <span>{% if view_mode == 'month' %}{{ day.date|date:"D" }}{% else %}{{ day.date|date:"M j" }}{% endif %}</span>
                 </div>
                 <div class="calendar-items">
                     {% for appointment in day.appointments %}
@@ -45,7 +47,7 @@
                             <div class="calendar-action"><a class="btn btn-outline-primary" href="/bookings/{{ booking.pk }}/review/">Agregar al calendario</a></div>
                         </div>
                     {% endfor %}
-                    {% if not day.appointments and not day.bookings %}
+                    {% if not day.appointments and not day.bookings and view_mode != 'month' %}
                         <div class="empty">No appointments</div>
                     {% endif %}
                 </div>
