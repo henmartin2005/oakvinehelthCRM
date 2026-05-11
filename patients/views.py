@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -35,6 +35,24 @@ def normalize_time_slot(value):
         return f'{time_obj.hour}:{time_obj.minute:02d}'
     except (AttributeError, ValueError):
         return value
+
+
+def booking_visit_type_to_appointment(value):
+    visit_type_map = {
+        'new_patient': Appointment.VISIT_TYPE_NEW,
+        'new': Appointment.VISIT_TYPE_NEW,
+        'followup': Appointment.VISIT_TYPE_FOLLOWUP,
+        'follow_up': Appointment.VISIT_TYPE_FOLLOWUP,
+        'annual_exam': Appointment.VISIT_TYPE_ANNUAL,
+        'annual': Appointment.VISIT_TYPE_ANNUAL,
+        'urgent': Appointment.VISIT_TYPE_URGENT,
+        'telemedicine': Appointment.VISIT_TYPE_TELEMEDICINE,
+    }
+    return visit_type_map.get(value, value)
+
+
+def start_of_week(day):
+    return day - timedelta(days=day.weekday())
 
 
 def api_booking_config(request):
@@ -322,15 +340,48 @@ def payment_update_view(request, pk):
 
 @login_required
 def booking_requests_view(request):
+    view_mode = request.GET.get('view', 'list')
     bookings = BookingRequest.objects.all().order_by('-created_at')
     status_filter = request.GET.get('status', '')
     if status_filter:
         bookings = bookings.filter(status=status_filter)
 
+    week_value = request.GET.get('week', '')
+    try:
+        selected_day = datetime.strptime(week_value, '%Y-%m-%d').date() if week_value else timezone.localdate()
+    except ValueError:
+        selected_day = timezone.localdate()
+    week_start = start_of_week(selected_day)
+    week_days = [week_start + timedelta(days=offset) for offset in range(7)]
+    week_end = week_days[-1]
+    appointments = Appointment.objects.select_related('patient').filter(
+        date__range=(week_start, week_end),
+    ).order_by('date', 'time')
+    pending_week_bookings = BookingRequest.objects.filter(
+        requested_date__range=(week_start, week_end),
+        status='pending',
+    ).order_by('requested_date', 'requested_time')
+
+    calendar_days = []
+    for day in week_days:
+        calendar_days.append(
+            {
+                'date': day,
+                'appointments': [appointment for appointment in appointments if appointment.date == day],
+                'bookings': [booking for booking in pending_week_bookings if booking.requested_date == day],
+            }
+        )
+
     context = {
         'bookings': bookings,
         'pending_count': BookingRequest.objects.filter(status='pending').count(),
         'status_filter': status_filter,
+        'view_mode': view_mode,
+        'calendar_days': calendar_days,
+        'week_start': week_start,
+        'week_end': week_end,
+        'previous_week': week_start - timedelta(days=7),
+        'next_week': week_start + timedelta(days=7),
     }
     return render(request, 'patients/booking_requests.html', context)
 
@@ -361,7 +412,7 @@ def booking_confirm_view(request, pk):
                 patient=patient,
                 date=booking.requested_date,
                 time=time_obj,
-                visit_type=booking.visit_type,
+                visit_type=booking_visit_type_to_appointment(booking.visit_type),
                 status=Appointment.STATUS_CONFIRMED,
                 notes=booking.notes,
             )

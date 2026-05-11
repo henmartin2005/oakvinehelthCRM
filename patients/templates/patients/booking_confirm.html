@@ -9,6 +9,10 @@
         <div class="alert alert-warning">A patient with this phone number already exists: {{ existing_patient }}.</div>
     {% endif %}
 
+    {% if booking.converted_to_appointment %}
+        <div class="alert alert-info">This booking is already on the calendar. You can modify the appointment from here.</div>
+    {% endif %}
+
     <section class="settings-section">
         <h2>Patient Information</h2>
         <div class="detail-grid">
@@ -32,10 +36,21 @@
         </div>
     </section>
 
-    <form class="form-actions" method="post">
-        {% csrf_token %}
-        <button class="btn btn-outline-danger" type="submit" name="action" value="cancel">Cancel Request</button>
-        <button class="btn btn-primary" type="submit" name="action" value="confirm">Confirm &amp; Create Appointment</button>
-    </form>
+    {% if booking.converted_to_appointment %}
+        <div class="action-bar">
+            <a class="btn btn-outline-muted" href="/bookings/">Back</a>
+            <a class="btn btn-primary primary-action" href="/appointments/{{ booking.converted_to_appointment.pk }}/edit/">Modificar cita</a>
+        </div>
+    {% elif booking.status == 'pending' %}
+        <form class="action-bar" method="post">
+            {% csrf_token %}
+            <button class="btn btn-outline-danger" type="submit" name="action" value="cancel">Cancel Request</button>
+            <button class="btn btn-primary primary-action" type="submit" name="action" value="confirm">Agregar al calendario</button>
+        </form>
+    {% else %}
+        <div class="action-bar">
+            <a class="btn btn-outline-muted" href="/bookings/">Back</a>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

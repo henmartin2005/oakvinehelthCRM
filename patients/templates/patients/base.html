@@ -111,15 +111,34 @@
         .detail-item { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
         .detail-label { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
         .detail-value { margin-top: 4px; font-weight: 700; }
+        .view-switch { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+        .week-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .week-title { color: var(--muted); font-weight: 800; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); gap: 12px; }
+        .calendar-day { min-height: 280px; padding: 12px; }
+        .calendar-date { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+        .calendar-date strong { font-size: 14px; }
+        .calendar-date span { color: var(--muted); font-size: 12px; font-weight: 800; }
+        .calendar-items { display: grid; gap: 8px; }
+        .calendar-event { border-left: 4px solid var(--primary); border-radius: 6px; background: #F9FAFB; padding: 9px; font-size: 12px; }
+        .calendar-event.pending-request { border-left-color: #F59E0B; background: #FFFBEB; }
+        .calendar-time { font-weight: 800; color: var(--text); }
+        .calendar-patient { margin-top: 3px; font-weight: 700; }
+        .calendar-meta { margin-top: 3px; color: var(--muted); }
+        .calendar-action { margin-top: 8px; }
+        .action-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 18px; border-top: 1px solid var(--border); margin-top: 22px; }
+        .primary-action { min-height: 46px; padding-inline: 20px; font-size: 15px; }
         @media (max-width: 1000px) {
             .stats-grid, .two-column, .summary-grid { grid-template-columns: 1fr; }
             .filter-card, .filter-card.compact { grid-template-columns: 1fr 1fr; }
+            .calendar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 760px) {
             .sidebar { position: static; width: auto; }
             .main { margin-left: 0; padding: 20px; }
             .topbar, .toolbar { align-items: flex-start; flex-direction: column; }
             .filter-card, .filter-card.compact, .form-grid, .detail-grid, .checkbox-grid { grid-template-columns: 1fr; }
+            .calendar-grid { grid-template-columns: 1fr; }
             .field.full, .form-actions { grid-column: auto; }
             .userbar { flex-wrap: wrap; }
         }

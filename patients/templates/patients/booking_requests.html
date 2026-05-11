@@ -6,52 +6,102 @@
     <div class="alert alert-warning">You have {{ pending_count }} pending booking requests</div>
 {% endif %}
 
-<nav class="tabs">
-    <a class="page-link {% if not status_filter %}active{% endif %}" href="/bookings/">All</a>
-    <a class="page-link {% if status_filter == 'pending' %}active{% endif %}" href="/bookings/?status=pending">Pending</a>
-    <a class="page-link {% if status_filter == 'confirmed' %}active{% endif %}" href="/bookings/?status=confirmed">Confirmed</a>
-    <a class="page-link {% if status_filter == 'cancelled' %}active{% endif %}" href="/bookings/?status=cancelled">Cancelled</a>
-    <a class="page-link {% if status_filter == 'converted' %}active{% endif %}" href="/bookings/?status=converted">Converted</a>
-</nav>
-
-<div class="card table-wrap">
-    <table>
-        <thead>
-            <tr>
-                <th>Patient Name</th>
-                <th>Phone</th>
-                <th>Date Requested</th>
-                <th>Time</th>
-                <th>Visit Type</th>
-                <th>New Patient</th>
-                <th>Received</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for booking in bookings %}
-            <tr>
-                <td>{{ booking.first_name }} {{ booking.last_name }}</td>
-                <td>{{ booking.phone }}</td>
-                <td>{{ booking.requested_date|date:"M j, Y" }}</td>
-                <td>{{ booking.requested_time }}</td>
-                <td>{{ booking.visit_type }}</td>
-                <td>{% if booking.is_new_patient %}Yes{% else %}No{% endif %}</td>
-                <td>{{ booking.created_at|date:"M j, Y g:i A" }}</td>
-                <td><span class="badge badge-{{ booking.status }}">{{ booking.get_status_display }}</span></td>
-                <td>
-                    {% if booking.status == 'pending' %}
-                        <a class="btn btn-outline-primary" href="/bookings/{{ booking.pk }}/review/">Review</a>
-                    {% else %}
-                        -
-                    {% endif %}
-                </td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="9" class="empty">No booking requests yet</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="view-switch">
+    <nav class="tabs">
+        <a class="page-link {% if view_mode == 'list' %}active{% endif %}" href="/bookings/?view=list">List View</a>
+        <a class="page-link {% if view_mode == 'calendar' %}active{% endif %}" href="/bookings/?view=calendar">Calendar Week</a>
+    </nav>
+    {% if view_mode == 'calendar' %}
+        <div class="week-nav">
+            <a class="btn btn-outline-muted" href="/bookings/?view=calendar&week={{ previous_week|date:'Y-m-d' }}">Previous week</a>
+            <span class="week-title">{{ week_start|date:"M j" }} - {{ week_end|date:"M j, Y" }}</span>
+            <a class="btn btn-outline-muted" href="/bookings/?view=calendar&week={{ next_week|date:'Y-m-d' }}">Next week</a>
+        </div>
+    {% endif %}
 </div>
+
+{% if view_mode == 'calendar' %}
+    <section class="calendar-grid">
+        {% for day in calendar_days %}
+            <div class="card calendar-day">
+                <div class="calendar-date">
+                    <strong>{{ day.date|date:"D" }}</strong>
+                    <span>{{ day.date|date:"M j" }}</span>
+                </div>
+                <div class="calendar-items">
+                    {% for appointment in day.appointments %}
+                        <div class="calendar-event">
+                            <div class="calendar-time">{{ appointment.time|time:"g:i A" }}</div>
+                            <div class="calendar-patient">{{ appointment.patient }}</div>
+                            <div class="calendar-meta">{{ appointment.get_visit_type_display }} · {{ appointment.get_status_display }}</div>
+                            <div class="calendar-action"><a class="btn btn-outline-muted" href="/appointments/{{ appointment.pk }}/edit/">Modify</a></div>
+                        </div>
+                    {% endfor %}
+                    {% for booking in day.bookings %}
+                        <div class="calendar-event pending-request">
+                            <div class="calendar-time">{{ booking.requested_time }}</div>
+                            <div class="calendar-patient">{{ booking.first_name }} {{ booking.last_name }}</div>
+                            <div class="calendar-meta">Pending booking · {{ booking.visit_type }}</div>
+                            <div class="calendar-action"><a class="btn btn-outline-primary" href="/bookings/{{ booking.pk }}/review/">Agregar al calendario</a></div>
+                        </div>
+                    {% endfor %}
+                    {% if not day.appointments and not day.bookings %}
+                        <div class="empty">No appointments</div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    </section>
+{% else %}
+    <nav class="tabs">
+        <a class="page-link {% if not status_filter %}active{% endif %}" href="/bookings/?view=list">All</a>
+        <a class="page-link {% if status_filter == 'pending' %}active{% endif %}" href="/bookings/?view=list&status=pending">Pending</a>
+        <a class="page-link {% if status_filter == 'confirmed' %}active{% endif %}" href="/bookings/?view=list&status=confirmed">Confirmed</a>
+        <a class="page-link {% if status_filter == 'cancelled' %}active{% endif %}" href="/bookings/?view=list&status=cancelled">Cancelled</a>
+        <a class="page-link {% if status_filter == 'converted' %}active{% endif %}" href="/bookings/?view=list&status=converted">Converted</a>
+    </nav>
+
+    <div class="card table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Patient Name</th>
+                    <th>Phone</th>
+                    <th>Date Requested</th>
+                    <th>Time</th>
+                    <th>Visit Type</th>
+                    <th>New Patient</th>
+                    <th>Received</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for booking in bookings %}
+                <tr>
+                    <td>{{ booking.first_name }} {{ booking.last_name }}</td>
+                    <td>{{ booking.phone }}</td>
+                    <td>{{ booking.requested_date|date:"M j, Y" }}</td>
+                    <td>{{ booking.requested_time }}</td>
+                    <td>{{ booking.visit_type }}</td>
+                    <td>{% if booking.is_new_patient %}Yes{% else %}No{% endif %}</td>
+                    <td>{{ booking.created_at|date:"M j, Y g:i A" }}</td>
+                    <td><span class="badge badge-{{ booking.status }}">{{ booking.get_status_display }}</span></td>
+                    <td>
+                        {% if booking.status == 'pending' %}
+                            <a class="btn btn-outline-primary" href="/bookings/{{ booking.pk }}/review/">Agregar al calendario</a>
+                        {% elif booking.converted_to_appointment %}
+                            <a class="btn btn-outline-muted" href="/appointments/{{ booking.converted_to_appointment.pk }}/edit/">Modificar cita</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="9" class="empty">No booking requests yet</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
 {% endblock %}
