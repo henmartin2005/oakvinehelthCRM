@@ -1,0 +1,27 @@
+{% extends "patients/base.html" %}
+{% block title %}Payments | Oak & Vine CRM{% endblock %}
+{% block page_title %}Payments{% endblock %}
+{% block content %}
+<div class="toolbar"><div></div><a class="btn btn-primary" href="/payments/new/">+ New Payment</a></div>
+<section class="summary-grid">
+    <div class="card summary-card"><div class="summary-label">Total collected this month</div><div class="summary-value">${{ month_total|floatformat:2 }}</div></div>
+    <div class="card summary-card"><div class="summary-label">Total collected all time</div><div class="summary-value">${{ all_time_total|floatformat:2 }}</div></div>
+    <div class="card summary-card"><div class="summary-label">Transactions this month</div><div class="summary-value">{{ month_transaction_count }}</div></div>
+</section>
+<div class="card table-wrap">
+    <table>
+        <thead><tr><th>Patient</th><th>Amount</th><th>Method</th><th>Appointment</th><th>Date</th><th>Notes</th><th>Actions</th></tr></thead>
+        <tbody>
+        {% for payment in payments %}
+            <tr>
+                <td>{{ payment.patient }}</td><td class="amount">${{ payment.amount }}</td><td><span class="badge badge-{{ payment.payment_method }}">{{ payment.get_payment_method_display }}</span></td>
+                <td>{{ payment.appointment|default:"-" }}</td><td>{{ payment.date|date:"M j, Y" }}</td><td>{{ payment.notes|default:"-"|truncatechars:50 }}</td>
+                <td><a class="btn btn-outline-muted" href="/payments/{{ payment.pk }}/edit/">Edit</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7" class="empty">No payments found.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

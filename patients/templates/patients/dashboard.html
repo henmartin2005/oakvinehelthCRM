@@ -1,0 +1,56 @@
+{% extends "patients/base.html" %}
+{% block title %}Dashboard | Oak & Vine CRM{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<section class="stats-grid">
+    <div class="card stat-card"><div class="stat-top"><span>Total Patients</span><span>👥</span></div><div class="stat-value">{{ total_patients }}</div></div>
+    <div class="card stat-card"><div class="stat-top"><span>Today's Appointments</span><span>📅</span></div><div class="stat-value">{{ today_appointments_count }}</div></div>
+    <div class="card stat-card"><div class="stat-top"><span>Pending Appointments</span><span>⏳</span></div><div class="stat-value">{{ pending_appointments_count }}</div></div>
+    <div class="card stat-card"><div class="stat-top"><span>This Month Payments</span><span>💰</span></div><div class="stat-value">${{ month_payments_total|floatformat:2 }}</div></div>
+</section>
+<section class="two-column">
+    <div class="card">
+        <div class="panel-head"><h2>Recent Patients</h2></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Name</th><th>Phone</th><th>Language</th><th>Payment Type</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for patient in recent_patients %}
+                    <tr>
+                        <td>{{ patient.first_name }} {{ patient.last_name }}</td>
+                        <td>{{ patient.phone }}</td>
+                        <td>{{ patient.get_language_display }}</td>
+                        <td>{{ patient.get_payment_type_display }}</td>
+                        <td><span class="badge {% if patient.is_active %}badge-active{% else %}badge-inactive{% endif %}">{% if patient.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="empty">No patients found.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <a class="panel-link" href="/patients/">View all</a>
+    </div>
+    <div class="card">
+        <div class="panel-head"><h2>Today's Appointments</h2></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Patient</th><th>Time</th><th>Visit Type</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for appointment in today_appointments %}
+                    <tr>
+                        <td>{{ appointment.patient }}</td>
+                        <td>{{ appointment.time|time:"g:i A" }}</td>
+                        <td>{{ appointment.get_visit_type_display }}</td>
+                        <td><span class="badge badge-{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="empty">No appointments today.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <a class="panel-link" href="/appointments/">View all</a>
+    </div>
+</section>
+{% endblock %}

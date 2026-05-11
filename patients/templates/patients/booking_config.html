@@ -1,0 +1,84 @@
+{% extends "patients/base.html" %}
+{% block title %}Online Booking Settings | Oak & Vine CRM{% endblock %}
+{% block page_title %}Online Booking Settings / Configuración de Reservas{% endblock %}
+{% block content %}
+<section class="card settings-section alert-info">
+    <h2>Connect your website to this CRM</h2>
+    <p>Use these URLs in your Lovable website to send bookings directly to this CRM</p>
+    <p><strong>Booking endpoint</strong></p>
+    <div class="code-block"><code>{{ api_url }}</code><button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText('{{ api_url }}')">Copy</button></div>
+    <p><strong>Config endpoint</strong></p>
+    <div class="code-block"><code>{{ config_url }}</code><button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText('{{ config_url }}')">Copy</button></div>
+    <p><strong>Available slots</strong></p>
+    <div class="code-block"><code>{{ slots_url }}</code><button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText('{{ slots_url }}')">Copy</button></div>
+</section>
+
+<form method="post">
+    {% csrf_token %}
+
+    <section class="card settings-section">
+        <h2>General Settings</h2>
+        <div class="form-grid">
+            <div class="checkbox-row">{{ form.booking_enabled }} <label for="{{ form.booking_enabled.id_for_label }}">Booking enabled</label></div>
+            <div class="checkbox-row">{{ form.accepting_new_patients }} <label for="{{ form.accepting_new_patients.id_for_label }}">Accepting new patients</label></div>
+            <div class="field full"><label for="{{ form.clinic_name.id_for_label }}">Clinic name</label>{{ form.clinic_name }}</div>
+            <div class="field full"><label for="{{ form.offline_message.id_for_label }}">Offline message</label>{{ form.offline_message }}</div>
+        </div>
+    </section>
+
+    <section class="card settings-section">
+        <h2>Form Messages</h2>
+        <div class="form-grid">
+            <div class="field full"><label for="{{ form.welcome_message.id_for_label }}">Welcome message English</label>{{ form.welcome_message }}</div>
+            <div class="field full"><label for="{{ form.welcome_message_es.id_for_label }}">Welcome message Spanish</label>{{ form.welcome_message_es }}</div>
+        </div>
+    </section>
+
+    <section class="card settings-section">
+        <h2>Visit Types</h2>
+        <div class="checkbox-grid">
+            <div class="checkbox-row">{{ form.show_new_patient }} <label for="{{ form.show_new_patient.id_for_label }}">New Patient</label></div>
+            <div class="checkbox-row">{{ form.show_followup }} <label for="{{ form.show_followup.id_for_label }}">Follow Up</label></div>
+            <div class="checkbox-row">{{ form.show_annual_exam }} <label for="{{ form.show_annual_exam.id_for_label }}">Annual Exam</label></div>
+            <div class="checkbox-row">{{ form.show_urgent }} <label for="{{ form.show_urgent.id_for_label }}">Urgent Visit</label></div>
+            <div class="checkbox-row">{{ form.show_telemedicine }} <label for="{{ form.show_telemedicine.id_for_label }}">Telemedicine</label></div>
+        </div>
+    </section>
+
+    <section class="card settings-section">
+        <h2>Available Time Slots</h2>
+        <p class="summary-label">Enter times separated by commas. Leave empty for appointment-only days.</p>
+        <div class="form-grid">
+            {% for day, field, slots in slot_fields %}
+                <div class="field full">
+                    <label for="{{ field.id_for_label }}">{{ day }}</label>{{ field }}
+                    <div class="slot-preview">
+                        {% for slot in slots %}
+                            <span class="slot-pill">{{ slot }}</span>
+                        {% empty %}
+                            <span class="summary-label">Appointment only</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="card settings-section">
+        <h2>Booking Rules</h2>
+        <div class="form-grid">
+            <div class="field"><label for="{{ form.min_days_ahead.id_for_label }}">Minimum days ahead</label>{{ form.min_days_ahead }}</div>
+            <div class="field"><label for="{{ form.max_days_ahead.id_for_label }}">Maximum days ahead</label>{{ form.max_days_ahead }}</div>
+            <div class="checkbox-row">{{ form.require_phone }} <label for="{{ form.require_phone.id_for_label }}">Require phone</label></div>
+            <div class="checkbox-row">{{ form.require_email }} <label for="{{ form.require_email.id_for_label }}">Require email</label></div>
+        </div>
+    </section>
+
+    <section class="card settings-section">
+        <h2>Notifications</h2>
+        <div class="field"><label for="{{ form.notify_email.id_for_label }}">Notify email</label>{{ form.notify_email }}</div>
+    </section>
+
+    <button class="btn btn-primary" style="width:100%;" type="submit">Save Configuration / Guardar Configuración</button>
+</form>
+{% endblock %}

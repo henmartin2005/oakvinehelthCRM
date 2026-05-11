@@ -1,0 +1,22 @@
+{% extends "patients/base.html" %}
+{% block title %}{{ form_title }} | Oak & Vine CRM{% endblock %}
+{% block page_title %}Patients{% endblock %}
+{% block content %}
+<form class="card form-card" method="post">
+    {% csrf_token %}
+    <h2>{{ form_title }}</h2>
+    <div class="form-grid">
+        {% for field in form %}
+            <div class="field {% if field.name == 'insurance_notes' %}full{% endif %} {% if field.name == 'is_active' %}checkbox-field{% endif %}">
+                {% if field.name == 'is_active' %}
+                    {{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {% else %}
+                    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
+                {% endif %}
+                {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+        {% endfor %}
+        <div class="form-actions"><a class="btn btn-outline-muted" href="/patients/">Cancel</a><button class="btn btn-primary" type="submit">Save Patient</button></div>
+    </div>
+</form>
+{% endblock %}

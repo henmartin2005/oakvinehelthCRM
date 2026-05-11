@@ -1,0 +1,28 @@
+{% extends "patients/base.html" %}
+{% block title %}Appointments | Oak & Vine CRM{% endblock %}
+{% block page_title %}Appointments{% endblock %}
+{% block content %}
+<div class="toolbar"><div></div><a class="btn btn-primary" href="/appointments/new/">+ New Appointment</a></div>
+<form class="card filter-card compact" method="get">
+    <input class="crm-input" type="date" name="date" value="{{ filters.date }}">
+    <select class="crm-input" name="status"><option value="">All Statuses</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <select class="crm-input" name="visit_type"><option value="">All Visit Types</option>{% for value, label in visit_type_choices %}<option value="{{ value }}" {% if filters.visit_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <button class="btn btn-primary" type="submit">Search</button>
+</form>
+<div class="card table-wrap">
+    <table>
+        <thead><tr><th>Patient</th><th>Date</th><th>Time</th><th>Visit Type</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+        <tbody>
+        {% for appointment in appointments %}
+            <tr>
+                <td>{{ appointment.patient }}</td><td>{{ appointment.date|date:"M j, Y" }}</td><td>{{ appointment.time|time:"g:i A" }}</td><td>{{ appointment.get_visit_type_display }}</td>
+                <td><span class="badge badge-{{ appointment.status }}">{{ appointment.get_status_display }}</span></td><td>{{ appointment.notes|default:"-"|truncatechars:50 }}</td>
+                <td><a class="btn btn-outline-muted" href="/appointments/{{ appointment.pk }}/edit/">Edit</a> <a class="btn btn-outline-primary" href="/appointments/{{ appointment.pk }}/edit/">Change Status</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7" class="empty">No appointments found.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

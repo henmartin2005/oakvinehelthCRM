@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Oak &amp; Vine CRM{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #16A34A;
+            --secondary: #1F2937;
+            --bg: #F9FAFB;
+            --card: #FFFFFF;
+            --border: #E5E7EB;
+            --text: #1F2937;
+            --muted: #6B7280;
+            --soft: #F3F4F6;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1);
+            --radius: 8px;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Inter, sans-serif; color: var(--text); background: var(--bg); }
+        a { color: inherit; text-decoration: none; }
+        .layout { min-height: 100vh; }
+        .sidebar { position: fixed; inset: 0 auto 0 0; width: 240px; background: var(--secondary); padding: 24px 16px; color: white; z-index: 10; }
+        .brand { padding: 8px 8px 28px; }
+        .brand-title { color: var(--primary); font-size: 24px; font-weight: 800; }
+        .brand-subtitle { margin-top: 4px; color: white; font-size: 13px; font-weight: 500; }
+        .nav { display: grid; gap: 8px; }
+        .nav-link { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: var(--radius); color: #D1D5DB; font-weight: 600; }
+        .nav-link:hover, .nav-link.active { background: var(--primary); color: white; }
+        .nav-badge { margin-left: auto; min-width: 22px; border-radius: 999px; padding: 2px 7px; background: #FEF9C3; color: #92400E; font-size: 12px; font-weight: 800; text-align: center; }
+        .main { margin-left: 240px; min-height: 100vh; padding: 32px; background: var(--bg); }
+        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 28px; }
+        .topbar h1 { margin: 0; font-size: 28px; line-height: 1.2; }
+        .userbar { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
+        .logout-form { margin: 0; }
+        .btn, button.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; border-radius: 6px; border: 1px solid transparent; padding: 9px 14px; font: inherit; font-weight: 700; cursor: pointer; background: white; }
+        .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .btn-outline-primary { color: var(--primary); border-color: var(--primary); }
+        .btn-outline-muted { color: #374151; border-color: #D1D5DB; }
+        .btn-outline-danger { color: #B91C1C; border-color: #FCA5A5; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+        .section-card { padding: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-bottom: 24px; }
+        .stat-card { padding: 24px; border-left: 4px solid var(--primary); }
+        .stat-top { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; font-weight: 700; text-transform: uppercase; }
+        .stat-value { margin-top: 16px; font-size: 32px; font-weight: 800; color: var(--text); }
+        .two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+        .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 20px 20px 0; }
+        .panel-head h2 { margin: 0; font-size: 18px; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background: var(--soft); color: #374151; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+        th, td { padding: 13px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tbody tr:nth-child(even) { background: #F9FAFB; }
+        .panel-link { display: flex; justify-content: flex-end; padding: 14px 20px 18px; color: var(--primary); font-weight: 700; font-size: 14px; }
+        .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+        .badge-active, .badge-confirmed { background: #D1FAE5; color: #065F46; }
+        .badge-inactive, .badge-completed, .badge-cash { background: #F3F4F6; color: #374151; }
+        .badge-pending { background: #FEF9C3; color: #92400E; }
+        .badge-cancelled { background: #FEE2E2; color: #991B1B; }
+        .badge-converted { background: #DBEAFE; color: #1E40AF; }
+        .badge-card { background: #DBEAFE; color: #1E40AF; }
+        .badge-zelle { background: #EDE9FE; color: #5B21B6; }
+        .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+        .filter-card { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(150px, 190px)) auto; gap: 12px; padding: 16px; margin-bottom: 20px; }
+        .filter-card.compact { grid-template-columns: repeat(3, minmax(160px, 1fr)) auto; }
+        .crm-input { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font: inherit; color: var(--text); background: white; }
+        .crm-select, .crm-textarea { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font: inherit; color: var(--text); background: white; }
+        .crm-input:focus, .crm-select:focus, .crm-textarea:focus { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(22, 163, 74, .15); }
+        .form-card { max-width: 980px; padding: 24px; }
+        .form-card h2 { margin: 0 0 22px; }
+        .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+        .field.full, .form-actions { grid-column: 1 / -1; }
+        label { display: block; margin-bottom: 7px; color: #374151; font-size: 14px; font-weight: 700; }
+        textarea.crm-input { resize: vertical; }
+        input[type="checkbox"].crm-input { width: auto; min-width: 18px; height: 18px; padding: 0; }
+        .checkbox-field { display: flex; align-items: center; gap: 10px; padding-top: 25px; }
+        .checkbox-field label { margin: 0; }
+        .field-error { margin-top: 6px; color: #B91C1C; font-size: 13px; }
+        .form-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 8px; }
+        .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 16px 20px; }
+        .page-link { border: 1px solid var(--border); border-radius: 6px; padding: 7px 11px; color: #374151; font-weight: 700; }
+        .page-link.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .empty { padding: 28px 20px; color: var(--muted); text-align: center; }
+        .amount { color: var(--primary); font-weight: 800; }
+        .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .summary-card { padding: 18px; }
+        .summary-label { color: var(--muted); font-size: 13px; font-weight: 700; }
+        .summary-value { margin-top: 8px; font-size: 24px; font-weight: 800; }
+        .money-input { position: relative; }
+        .money-input span { position: absolute; left: 14px; top: 41px; color: var(--muted); font-weight: 700; }
+        .money-input .crm-input { padding-left: 30px; }
+        .messages { display: grid; gap: 10px; margin-bottom: 18px; }
+        .message { padding: 12px 14px; border-radius: var(--radius); border: 1px solid #BBF7D0; background: #DCFCE7; color: #166534; font-weight: 700; }
+        .alert { padding: 14px 16px; border-radius: var(--radius); margin-bottom: 18px; font-weight: 700; }
+        .alert-warning { background: #FEF9C3; color: #92400E; border: 1px solid #FDE68A; }
+        .alert-info { background: #DBEAFE; color: #1E40AF; border: 1px solid #BFDBFE; }
+        .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+        .code-block { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid #BFDBFE; border-radius: 6px; background: white; font-family: Consolas, monospace; font-size: 13px; overflow-x: auto; }
+        .settings-section { padding: 20px; margin-bottom: 18px; }
+        .settings-section h2 { margin: 0 0 16px; font-size: 18px; }
+        .checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .checkbox-row { display: flex; align-items: center; gap: 10px; }
+        .slot-preview { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .slot-pill { border-radius: 999px; padding: 4px 10px; background: #D1FAE5; color: #065F46; font-size: 12px; font-weight: 800; }
+        .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .detail-item { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        .detail-label { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+        .detail-value { margin-top: 4px; font-weight: 700; }
+        @media (max-width: 1000px) {
+            .stats-grid, .two-column, .summary-grid { grid-template-columns: 1fr; }
+            .filter-card, .filter-card.compact { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 760px) {
+            .sidebar { position: static; width: auto; }
+            .main { margin-left: 0; padding: 20px; }
+            .topbar, .toolbar { align-items: flex-start; flex-direction: column; }
+            .filter-card, .filter-card.compact, .form-grid, .detail-grid, .checkbox-grid { grid-template-columns: 1fr; }
+            .field.full, .form-actions { grid-column: auto; }
+            .userbar { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-title">Oak &amp; Vine</div>
+            <div class="brand-subtitle">Health Center</div>
+        </div>
+        <nav class="nav">
+            <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">🏠 <span>Dashboard</span></a>
+            <a class="nav-link {% if request.path|slice:':10' == '/patients/' %}active{% endif %}" href="/patients/">👥 <span>Patients</span></a>
+            <a class="nav-link {% if request.path|slice:':14' == '/appointments/' %}active{% endif %}" href="/appointments/">📅 <span>Appointments</span></a>
+            <a class="nav-link {% if request.path|slice:':10' == '/payments/' %}active{% endif %}" href="/payments/">💰 <span>Payments</span></a>
+            <a class="nav-link {% if request.path|slice:':10' == '/bookings/' and request.path != '/bookings/settings/' %}active{% endif %}" href="/bookings/">📬 <span>Bookings</span>{% if pending_bookings_count %}<span class="nav-badge">{{ pending_bookings_count }}</span>{% endif %}</a>
+            <a class="nav-link {% if request.path == '/bookings/settings/' %}active{% endif %}" href="/bookings/settings/">⚙️ <span>Settings</span></a>
+        </nav>
+    </aside>
+    <main class="main">
+        <div class="topbar">
+            <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+            <div class="userbar">
+                <span>{{ request.user.get_username }}</span>
+                <form class="logout-form" method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-primary" type="submit">Logout</button>
+                </form>
+            </div>
+        </div>
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}<div class="message">{{ message }}</div>{% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

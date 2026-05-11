@@ -1,0 +1,41 @@
+{% extends "patients/base.html" %}
+{% block title %}Review Booking | Oak & Vine CRM{% endblock %}
+{% block page_title %}Review Booking Request{% endblock %}
+{% block content %}
+<div class="card form-card">
+    <a class="panel-link" href="/bookings/">Back to booking requests</a>
+
+    {% if existing_patient %}
+        <div class="alert alert-warning">A patient with this phone number already exists: {{ existing_patient }}.</div>
+    {% endif %}
+
+    <section class="settings-section">
+        <h2>Patient Information</h2>
+        <div class="detail-grid">
+            <div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">{{ booking.first_name }} {{ booking.last_name }}</div></div>
+            <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">{{ booking.phone }}</div></div>
+            <div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">{{ booking.email|default:"-" }}</div></div>
+            <div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">{{ booking.date_of_birth|default:"-" }}</div></div>
+            <div class="detail-item"><div class="detail-label">Language</div><div class="detail-value">{{ booking.get_language_display }}</div></div>
+            <div class="detail-item"><div class="detail-label">New Patient</div><div class="detail-value">{% if booking.is_new_patient %}Yes{% else %}No{% endif %}</div></div>
+        </div>
+    </section>
+
+    <section class="settings-section">
+        <h2>Requested Appointment</h2>
+        <div class="detail-grid">
+            <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">{{ booking.requested_date|date:"M j, Y" }}</div></div>
+            <div class="detail-item"><div class="detail-label">Time</div><div class="detail-value">{{ booking.requested_time }}</div></div>
+            <div class="detail-item"><div class="detail-label">Visit Type</div><div class="detail-value">{{ booking.visit_type }}</div></div>
+            <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="badge badge-{{ booking.status }}">{{ booking.get_status_display }}</span></div></div>
+            <div class="detail-item" style="grid-column:1 / -1;"><div class="detail-label">Notes</div><div class="detail-value">{{ booking.notes|default:"-" }}</div></div>
+        </div>
+    </section>
+
+    <form class="form-actions" method="post">
+        {% csrf_token %}
+        <button class="btn btn-outline-danger" type="submit" name="action" value="cancel">Cancel Request</button>
+        <button class="btn btn-primary" type="submit" name="action" value="confirm">Confirm &amp; Create Appointment</button>
+    </form>
+</div>
+{% endblock %}

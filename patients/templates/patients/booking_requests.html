@@ -1,0 +1,57 @@
+{% extends "patients/base.html" %}
+{% block title %}Booking Requests | Oak & Vine CRM{% endblock %}
+{% block page_title %}Booking Requests / Solicitudes de Cita{% endblock %}
+{% block content %}
+{% if pending_count > 0 %}
+    <div class="alert alert-warning">You have {{ pending_count }} pending booking requests</div>
+{% endif %}
+
+<nav class="tabs">
+    <a class="page-link {% if not status_filter %}active{% endif %}" href="/bookings/">All</a>
+    <a class="page-link {% if status_filter == 'pending' %}active{% endif %}" href="/bookings/?status=pending">Pending</a>
+    <a class="page-link {% if status_filter == 'confirmed' %}active{% endif %}" href="/bookings/?status=confirmed">Confirmed</a>
+    <a class="page-link {% if status_filter == 'cancelled' %}active{% endif %}" href="/bookings/?status=cancelled">Cancelled</a>
+    <a class="page-link {% if status_filter == 'converted' %}active{% endif %}" href="/bookings/?status=converted">Converted</a>
+</nav>
+
+<div class="card table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Patient Name</th>
+                <th>Phone</th>
+                <th>Date Requested</th>
+                <th>Time</th>
+                <th>Visit Type</th>
+                <th>New Patient</th>
+                <th>Received</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for booking in bookings %}
+            <tr>
+                <td>{{ booking.first_name }} {{ booking.last_name }}</td>
+                <td>{{ booking.phone }}</td>
+                <td>{{ booking.requested_date|date:"M j, Y" }}</td>
+                <td>{{ booking.requested_time }}</td>
+                <td>{{ booking.visit_type }}</td>
+                <td>{% if booking.is_new_patient %}Yes{% else %}No{% endif %}</td>
+                <td>{{ booking.created_at|date:"M j, Y g:i A" }}</td>
+                <td><span class="badge badge-{{ booking.status }}">{{ booking.get_status_display }}</span></td>
+                <td>
+                    {% if booking.status == 'pending' %}
+                        <a class="btn btn-outline-primary" href="/bookings/{{ booking.pk }}/review/">Review</a>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="9" class="empty">No booking requests yet</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
