@@ -35,8 +35,13 @@ class Patient(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def patient_code(self):
+        code_number = max(self.id - 1, 0) if self.id else 0
+        return str(code_number).zfill(5)
+
     def __str__(self):
-        return f'{self.first_name} {self.last_name}'
+        return f'{self.patient_code} - {self.first_name} {self.last_name}'
 
 
 class Appointment(models.Model):

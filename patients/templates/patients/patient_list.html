@@ -2,9 +2,12 @@
 {% block title %}Patients | Oak & Vine CRM{% endblock %}
 {% block page_title %}Patients{% endblock %}
 {% block content %}
-<div class="toolbar"><div></div><a class="btn btn-primary" href="/patients/new/">+ New Patient</a></div>
+<div class="toolbar">
+    <div></div>
+    {% if not current_user_is_assistant %}<a class="btn btn-primary" href="/patients/new/">+ New Patient</a>{% endif %}
+</div>
 <form class="card filter-card" method="get">
-    <input class="crm-input" type="search" name="q" value="{{ filters.q }}" placeholder="Search by name or phone">
+    <input class="crm-input" type="search" name="q" value="{{ filters.q }}" placeholder="Search by Patient ID, name, phone or email">
     <select class="crm-input" name="status"><option value="">All Statuses</option><option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option><option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inactive</option></select>
     <select class="crm-input" name="payment_type"><option value="">All Payment Types</option><option value="cash" {% if filters.payment_type == 'cash' %}selected{% endif %}>Cash</option><option value="membership" {% if filters.payment_type == 'membership' %}selected{% endif %}>Membership</option></select>
     <select class="crm-input" name="language"><option value="">All Languages</option><option value="es" {% if filters.language == 'es' %}selected{% endif %}>Spanish</option><option value="en" {% if filters.language == 'en' %}selected{% endif %}>English</option></select>
@@ -13,18 +16,24 @@
 <div class="card">
     <div class="table-wrap">
         <table>
-            <thead><tr><th>#</th><th>Full Name</th><th>Phone</th><th>Email</th><th>Language</th><th>Payment Type</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Patient ID</th><th>Full Name</th><th>Phone</th><th>Email</th><th>Language</th><th>Payment Type</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
             {% for patient in page_obj %}
                 <tr>
-                    <td>{{ page_obj.start_index|add:forloop.counter0 }}</td>
+                    <td><a class="patient-id-link" href="/patients/{{ patient.pk }}/edit/">{{ patient.patient_code }}</a></td>
                     <td>{{ patient.first_name }} {{ patient.last_name }}</td>
                     <td>{{ patient.phone }}</td>
                     <td>{{ patient.email|default:"-" }}</td>
                     <td>{{ patient.get_language_display }}</td>
                     <td>{{ patient.get_payment_type_display }}</td>
                     <td><span class="badge {% if patient.is_active %}badge-active{% else %}badge-inactive{% endif %}">{% if patient.is_active %}Active{% else %}Inactive{% endif %}</span></td>
-                    <td><a class="btn btn-outline-primary" href="/patients/{{ patient.pk }}/edit/">View</a> <a class="btn btn-outline-muted" href="/patients/{{ patient.pk }}/edit/">Edit</a></td>
+                    <td>
+                        {% if current_user_is_assistant %}
+                            <span class="badge badge-inactive">Read only</span>
+                        {% else %}
+                            <a class="btn btn-outline-primary" href="/patients/{{ patient.pk }}/edit/">View</a> <a class="btn btn-outline-muted" href="/patients/{{ patient.pk }}/edit/">Edit</a>
+                        {% endif %}
+                    </td>
                 </tr>
             {% empty %}
                 <tr><td colspan="8" class="empty">No patients found.</td></tr>

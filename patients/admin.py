@@ -6,6 +6,7 @@ from .models import Appointment, BookingConfig, BookingRequest, Patient, Payment
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
     list_display = (
+        'patient_code',
         'first_name',
         'last_name',
         'phone',
@@ -13,7 +14,8 @@ class PatientAdmin(admin.ModelAdmin):
         'language',
         'is_active',
     )
-    search_fields = ('first_name', 'last_name', 'phone', 'email')
+    readonly_fields = ('patient_code',)
+    search_fields = ('id', 'first_name', 'last_name', 'phone', 'email')
     list_filter = ('language', 'payment_type', 'is_active')
     ordering = ('last_name', 'first_name')
 

@@ -12,24 +12,40 @@
     {% if booking.converted_to_appointment %}
         <div class="alert alert-info">This booking is already on the calendar. You can modify the appointment from here.</div>
     {% elif booking.status == 'pending' %}
-        <form class="action-bar" method="post">
-            {% csrf_token %}
+        <div class="action-bar">
             <span class="week-title">Ready to add this request to the appointment calendar.</span>
-            <button class="btn btn-primary primary-action" type="submit" name="action" value="confirm">Agregar al calendario</button>
-        </form>
+            <span class="badge badge-pending">Review patient details first</span>
+        </div>
     {% endif %}
 
-    <section class="settings-section">
+    <form class="settings-section" method="post">
+        {% csrf_token %}
         <h2>Patient Information</h2>
-        <div class="detail-grid">
-            <div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">{{ booking.first_name }} {{ booking.last_name }}</div></div>
-            <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">{{ booking.phone }}</div></div>
-            <div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">{{ booking.email|default:"-" }}</div></div>
-            <div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">{{ booking.date_of_birth|default:"-" }}</div></div>
-            <div class="detail-item"><div class="detail-label">Language</div><div class="detail-value">{{ booking.get_language_display }}</div></div>
-            <div class="detail-item"><div class="detail-label">New Patient</div><div class="detail-value">{% if booking.is_new_patient %}Yes{% else %}No{% endif %}</div></div>
+        <div class="form-grid">
+            {% for field in patient_form %}
+                <div class="field {% if field.name == 'insurance_notes' %}full{% endif %} {% if field.name == 'is_active' %}checkbox-field{% endif %}">
+                    {% if field.name == 'is_active' %}
+                        {{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {% else %}
+                        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
+                    {% endif %}
+                    {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                </div>
+            {% endfor %}
         </div>
-    </section>
+        <div class="action-bar">
+            {% if can_modify_patients %}
+                <button class="btn btn-outline-primary" type="submit" name="action" value="save_patient">Guardar datos del paciente</button>
+            {% else %}
+                <span class="badge badge-inactive">Patient data is read only</span>
+            {% endif %}
+            {% if booking.converted_to_appointment %}
+                <a class="btn btn-primary primary-action" href="/appointments/{{ booking.converted_to_appointment.pk }}/edit/">Modificar cita</a>
+            {% elif booking.status == 'pending' %}
+                <button class="btn btn-primary primary-action" type="submit" name="action" value="confirm">Guardar y agregar al calendario</button>
+            {% endif %}
+        </div>
+    </form>
 
     <section class="settings-section">
         <h2>Requested Appointment</h2>
@@ -45,13 +61,11 @@
     {% if booking.converted_to_appointment %}
         <div class="action-bar">
             <a class="btn btn-outline-muted" href="/bookings/">Back</a>
-            <a class="btn btn-primary primary-action" href="/appointments/{{ booking.converted_to_appointment.pk }}/edit/">Modificar cita</a>
         </div>
     {% elif booking.status == 'pending' %}
         <form class="action-bar" method="post">
             {% csrf_token %}
             <button class="btn btn-outline-danger" type="submit" name="action" value="cancel">Cancel Request</button>
-            <button class="btn btn-primary primary-action" type="submit" name="action" value="confirm">Agregar al calendario</button>
         </form>
     {% else %}
         <div class="action-bar">

@@ -1,0 +1,111 @@
+{% extends "patients/base.html" %}
+{% block title %}User Center | Oak & Vine CRM{% endblock %}
+{% block page_title %}User Center{% endblock %}
+{% block content %}
+<section class="user-center-shell">
+    <div class="user-center-column">
+        {% if can_change_own_password %}
+            <form class="card form-card compact-card password-card" method="post">
+                {% csrf_token %}
+                <h2>Change My Password</h2>
+                {% for error in own_password_form.non_field_errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                <div class="form-grid">
+                    {% for field in own_password_form %}
+                        <div class="field full">
+                            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
+                            {% if field.help_text %}<details class="help-text compact-help"><summary>Password rules</summary>{{ field.help_text }}</details>{% endif %}
+                            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit" name="action" value="change_own_password">Update Password</button>
+                    </div>
+                </div>
+            </form>
+        {% else %}
+            <section class="card form-card compact-card">
+                <h2>Account Access</h2>
+                <div class="alert alert-info">Assistant accounts cannot change system passwords.</div>
+            </section>
+        {% endif %}
+
+        {% if can_manage_users %}
+            <form class="card form-card compact-card password-card" method="post">
+                {% csrf_token %}
+                <h2>Change User Password</h2>
+                {% for error in target_form.non_field_errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                {% for error in reset_password_form.non_field_errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                <div class="form-grid">
+                    {% for field in target_form %}
+                        <div class="field full">
+                            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
+                            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    {% for field in reset_password_form %}
+                        <div class="field full">
+                            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
+                            {% if field.help_text %}<details class="help-text compact-help"><summary>Password rules</summary>{{ field.help_text }}</details>{% endif %}
+                            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit" name="action" value="reset_user_password">Save User Password</button>
+                    </div>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+
+    {% if can_manage_users %}
+        <div class="user-center-column">
+            <form class="card form-card compact-card" method="post">
+                {% csrf_token %}
+                <h2>Create User</h2>
+                {% for error in create_user_form.non_field_errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                <div class="form-grid">
+                    {% for field in create_user_form %}
+                        <div class="field {% if field.name == 'email' %}full{% endif %}">
+                            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
+                            {% if field.help_text %}<details class="help-text compact-help"><summary>Password rules</summary>{{ field.help_text }}</details>{% endif %}
+                            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit" name="action" value="create_user">Create User</button>
+                    </div>
+                </div>
+            </form>
+
+            <section class="card table-wrap user-table-card">
+                <table>
+                    <thead><tr><th>Username</th><th>Role</th><th>Name</th><th>Email</th><th>Staff</th><th>Superuser</th><th>Last Login</th><th>Actions</th></tr></thead>
+                    <tbody>
+                    {% for user in users %}
+                        <tr>
+                            <td>{{ user.username }}</td>
+                            <td><span class="badge badge-active">{{ user.crm_role }}</span></td>
+                            <td>{{ user.get_full_name|default:"-" }}</td>
+                            <td>{{ user.email|default:"-" }}</td>
+                            <td>{% if user.is_staff %}Yes{% else %}No{% endif %}</td>
+                            <td>{% if user.is_superuser %}Yes{% else %}No{% endif %}</td>
+                            <td>{{ user.last_login|date:"M j, Y g:i A"|default:"-" }}</td>
+                            <td>
+                                <a class="btn btn-outline-primary" href="{% url 'user_update' user.pk %}">Edit</a>
+                                {% if user != request.user %}
+                                    <a class="btn btn-outline-danger" href="{% url 'user_delete' user.pk %}">Delete</a>
+                                {% else %}
+                                    <span class="badge badge-inactive">Current user</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="8" class="empty">No users found.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

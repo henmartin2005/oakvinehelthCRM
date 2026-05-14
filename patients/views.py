@@ -3,7 +3,9 @@ import calendar
 from datetime import datetime, timedelta
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import Group
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.http import JsonResponse
@@ -11,12 +13,72 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from .forms import AppointmentForm, BookingConfigForm, PatientForm, PaymentForm
+from .forms import (
+    AppointmentForm,
+    BookingConfigForm,
+    CRMPasswordChangeForm,
+    CRMSetPasswordForm,
+    CRMUserCreationForm,
+    CRMUserUpdateForm,
+    PatientForm,
+    PaymentForm,
+    ROLE_ADMIN,
+    ROLE_ASSISTANT,
+    ROLE_USER,
+    UserPasswordTargetForm,
+)
 from .models import Appointment, BookingConfig, BookingRequest, Patient, Payment
 
 
 def money_sum(queryset):
     return queryset.aggregate(total=Sum('amount'))['total'] or 0
+
+
+def ensure_crm_roles():
+    groups = {}
+    for role in [ROLE_ADMIN, ROLE_ASSISTANT, ROLE_USER]:
+        groups[role], _ = Group.objects.get_or_create(name=role)
+    return groups
+
+
+def user_has_role(user, role):
+    return user.is_authenticated and user.groups.filter(name=role).exists()
+
+
+def is_crm_admin(user):
+    return user.is_authenticated and (user.is_superuser or user_has_role(user, ROLE_ADMIN))
+
+
+def is_crm_assistant(user):
+    return user_has_role(user, ROLE_ASSISTANT)
+
+
+def get_user_role(user):
+    if user.is_superuser or user_has_role(user, ROLE_ADMIN):
+        return ROLE_ADMIN
+    if user_has_role(user, ROLE_ASSISTANT):
+        return ROLE_ASSISTANT
+    if user_has_role(user, ROLE_USER):
+        return ROLE_USER
+    return ROLE_USER
+
+
+def assign_user_role(user, role):
+    groups = ensure_crm_roles()
+    user.groups.remove(*groups.values())
+    user.groups.add(groups[role])
+    user.is_staff = role == ROLE_ADMIN
+    user.save()
+
+
+def disable_form_fields(form):
+    for field in form.fields.values():
+        field.disabled = True
+    return form
+
+
+def crm_admin_count():
+    return get_user_model().objects.filter(Q(is_superuser=True) | Q(groups__name=ROLE_ADMIN)).distinct().count()
 
 
 def get_booking_config():
@@ -95,6 +157,31 @@ def create_or_update_patient_from_booking(data):
     return patient
 
 
+def booking_patient_initial(booking):
+    return {
+        'first_name': booking.first_name,
+        'last_name': booking.last_name,
+        'date_of_birth': booking.date_of_birth,
+        'phone': booking.phone,
+        'email': booking.email,
+        'language': booking.language,
+        'payment_type': Patient.PAYMENT_CASH,
+        'is_active': True,
+    }
+
+
+def attach_patients_to_bookings(bookings):
+    phones = {booking.phone for booking in bookings if booking.phone}
+    emails = {booking.email for booking in bookings if booking.email}
+    patients = Patient.objects.filter(Q(phone__in=phones) | Q(email__in=emails)).order_by('id')
+    patients_by_phone = {patient.phone: patient for patient in patients if patient.phone}
+    patients_by_email = {patient.email: patient for patient in patients if patient.email}
+
+    for booking in bookings:
+        booking.matched_patient = patients_by_phone.get(booking.phone) or patients_by_email.get(booking.email)
+    return bookings
+
+
 def build_booking_calendar(view_mode, selected_day):
     if view_mode == 'day':
         period_start = selected_day
@@ -138,6 +225,7 @@ def build_booking_calendar(view_mode, selected_day):
         requested_date__range=(period_start, period_end),
         status='pending',
     ).order_by('requested_date', 'requested_time')
+    pending_bookings = attach_patients_to_bookings(list(pending_bookings))
 
     calendar_days = []
     for day in days:
@@ -250,6 +338,7 @@ def api_book_appointment(request):
                 'message': 'Booking request received successfully',
                 'booking_id': booking.id,
                 'patient_id': patient.id,
+                'patient_code': patient.patient_code,
             },
             status=201,
         )
@@ -317,6 +406,141 @@ def dashboard_view(request):
 
 
 @login_required
+def admin_profile_view(request):
+    ensure_crm_roles()
+    target_user = request.user
+    can_manage_users = is_crm_admin(request.user)
+    can_change_own_password = not is_crm_assistant(request.user)
+    own_password_form = CRMPasswordChangeForm(request.user, prefix='own') if can_change_own_password else None
+    target_form = UserPasswordTargetForm(prefix='target')
+    reset_password_form = CRMSetPasswordForm(target_user, prefix='reset')
+    create_user_form = CRMUserCreationForm(prefix='create')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'change_own_password':
+            if not can_change_own_password:
+                messages.error(request, 'Assistant users cannot change their system password.')
+                return redirect('admin_profile')
+            own_password_form = CRMPasswordChangeForm(request.user, request.POST, prefix='own')
+            if own_password_form.is_valid():
+                user = own_password_form.save()
+                update_session_auth_hash(request, user)
+                messages.success(request, 'Your password was updated successfully.')
+                return redirect('admin_profile')
+
+        if action == 'reset_user_password':
+            if not can_manage_users:
+                messages.error(request, 'Only admins can change passwords for other users.')
+                return redirect('admin_profile')
+
+            target_form = UserPasswordTargetForm(request.POST, prefix='target')
+            if target_form.is_valid():
+                target_user = target_form.cleaned_data['user']
+                reset_password_form = CRMSetPasswordForm(target_user, request.POST, prefix='reset')
+                if reset_password_form.is_valid():
+                    reset_password_form.save()
+                    messages.success(request, f'Password updated for {target_user.username}.')
+                    return redirect('admin_profile')
+            else:
+                reset_password_form = CRMSetPasswordForm(target_user, request.POST, prefix='reset')
+
+        if action == 'create_user':
+            if not can_manage_users:
+                messages.error(request, 'Only admins can create CRM users.')
+                return redirect('admin_profile')
+
+            create_user_form = CRMUserCreationForm(request.POST, prefix='create')
+            if create_user_form.is_valid():
+                user = create_user_form.save(commit=False)
+                role = create_user_form.cleaned_data['role']
+                user.is_staff = role == ROLE_ADMIN
+                user.save()
+                assign_user_role(user, role)
+                messages.success(request, f'User {user.username} was created as {role}.')
+                return redirect('admin_profile')
+
+    users = get_user_model().objects.order_by('username') if can_manage_users else []
+    for user in users:
+        user.crm_role = get_user_role(user)
+    return render(
+        request,
+        'patients/admin_profile.html',
+        {
+            'own_password_form': own_password_form,
+            'target_form': target_form,
+            'reset_password_form': reset_password_form,
+            'create_user_form': create_user_form,
+            'users': users,
+            'can_manage_users': can_manage_users,
+            'can_change_own_password': can_change_own_password,
+        },
+    )
+
+
+@login_required
+def user_update_view(request, pk):
+    ensure_crm_roles()
+    if not is_crm_admin(request.user):
+        messages.error(request, 'Only admins can modify CRM users.')
+        return redirect('admin_profile')
+
+    user = get_object_or_404(get_user_model(), pk=pk)
+    original_is_admin = is_crm_admin(user)
+    form = CRMUserUpdateForm(request.POST or None, instance=user)
+
+    if request.method == 'POST' and form.is_valid():
+        updated_user = form.save(commit=False)
+        role = form.cleaned_data['role']
+        if original_is_admin and role != ROLE_ADMIN and crm_admin_count() <= 1:
+            form.add_error('role', 'At least one admin must remain in the CRM.')
+        else:
+            updated_user.is_staff = role == ROLE_ADMIN
+            if role == ROLE_ADMIN and user.is_superuser:
+                updated_user.is_staff = True
+            updated_user.save()
+            assign_user_role(updated_user, role)
+            messages.success(request, f'User {updated_user.username} was updated.')
+            return redirect('admin_profile')
+
+    return render(
+        request,
+        'patients/user_form.html',
+        {
+            'form': form,
+            'managed_user': user,
+            'form_title': f'Edit User: {user.username}',
+        },
+    )
+
+
+@login_required
+def user_delete_view(request, pk):
+    ensure_crm_roles()
+    if not is_crm_admin(request.user):
+        messages.error(request, 'Only admins can delete CRM users.')
+        return redirect('admin_profile')
+
+    user = get_object_or_404(get_user_model(), pk=pk)
+    if user == request.user:
+        messages.error(request, 'You cannot delete your own user account.')
+        return redirect('admin_profile')
+    if is_crm_admin(user) and crm_admin_count() <= 1:
+        messages.error(request, 'At least one admin must remain in the CRM.')
+        return redirect('admin_profile')
+
+    if request.method == 'POST':
+        username = user.username
+        user.delete()
+        messages.success(request, f'User {username} was deleted.')
+        return redirect('admin_profile')
+
+    user.crm_role = get_user_role(user)
+    return render(request, 'patients/user_confirm_delete.html', {'managed_user': user})
+
+
+@login_required
 def patient_list_view(request):
     patients = Patient.objects.order_by('last_name', 'first_name')
     q = request.GET.get('q', '').strip()
@@ -331,6 +555,8 @@ def patient_list_view(request):
             | Q(phone__icontains=q)
             | Q(email__icontains=q)
         )
+        if q.isdigit():
+            patients = patients | Patient.objects.filter(id=int(q)) | Patient.objects.filter(id=int(q) + 1)
     if status == 'active':
         patients = patients.filter(is_active=True)
     elif status == 'inactive':
@@ -339,6 +565,7 @@ def patient_list_view(request):
         patients = patients.filter(payment_type=payment_type)
     if language:
         patients = patients.filter(language=language)
+    patients = patients.distinct()
 
     page_obj = Paginator(patients, 10).get_page(request.GET.get('page'))
     return render(
@@ -350,6 +577,9 @@ def patient_list_view(request):
 
 @login_required
 def patient_create_view(request):
+    if is_crm_assistant(request.user):
+        messages.error(request, 'Assistant users cannot create or modify patient records.')
+        return redirect('patient_list')
     form = PatientForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -359,6 +589,9 @@ def patient_create_view(request):
 
 @login_required
 def patient_update_view(request, pk):
+    if is_crm_assistant(request.user):
+        messages.error(request, 'Assistant users cannot create or modify patient records.')
+        return redirect('patient_list')
     patient = get_object_or_404(Patient, pk=pk)
     form = PatientForm(request.POST or None, instance=patient)
     if request.method == 'POST' and form.is_valid():
@@ -455,6 +688,31 @@ def booking_requests_view(request):
     status_filter = request.GET.get('status', '')
     if status_filter:
         bookings = bookings.filter(status=status_filter)
+    search_query = request.GET.get('q', '').strip()
+    if search_query:
+        patient_matches = Patient.objects.filter(
+            Q(first_name__icontains=search_query)
+            | Q(last_name__icontains=search_query)
+            | Q(phone__icontains=search_query)
+            | Q(email__icontains=search_query)
+        )
+        if search_query.isdigit():
+            patient_code_id = int(search_query) + 1
+            patient_matches = patient_matches | Patient.objects.filter(id=int(search_query))
+            patient_matches = patient_matches | Patient.objects.filter(id=patient_code_id)
+
+        matched_phones = patient_matches.exclude(phone='').values_list('phone', flat=True)
+        matched_emails = patient_matches.exclude(email='').values_list('email', flat=True)
+        bookings = bookings.filter(
+            Q(first_name__icontains=search_query)
+            | Q(last_name__icontains=search_query)
+            | Q(phone__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(phone__in=matched_phones)
+            | Q(email__in=matched_emails)
+        ).distinct()
+
+    bookings = attach_patients_to_bookings(list(bookings))
 
     date_value = request.GET.get('date') or request.GET.get('week', '')
     try:
@@ -467,6 +725,7 @@ def booking_requests_view(request):
         'bookings': bookings,
         'pending_count': BookingRequest.objects.filter(status='pending').count(),
         'status_filter': status_filter,
+        'search_query': search_query,
         'view_mode': view_mode,
         'selected_day': selected_day,
     }
@@ -479,11 +738,24 @@ def booking_confirm_view(request, pk):
     """Convert a booking request into a real appointment."""
     booking = get_object_or_404(BookingRequest, pk=pk)
     existing_patient = find_existing_patient(phone=booking.phone, email=booking.email)
+    can_modify_patients = not is_crm_assistant(request.user)
+    patient_form = PatientForm(
+        request.POST or None,
+        instance=existing_patient,
+        initial=booking_patient_initial(booking),
+        prefix='patient',
+    )
+    if not can_modify_patients:
+        disable_form_fields(patient_form)
 
     if request.method == 'POST':
         action = request.POST.get('action')
 
-        if action == 'confirm':
+        if action == 'save_patient' and not can_modify_patients:
+            messages.error(request, 'Assistant users cannot modify patient records.')
+            return redirect('booking_confirm', pk=booking.pk)
+
+        if action == 'confirm' and not can_modify_patients:
             patient = existing_patient
             if not patient:
                 patient = create_or_update_patient_from_booking(
@@ -513,6 +785,42 @@ def booking_confirm_view(request, pk):
             messages.success(request, 'Booking converted to an appointment.')
             return redirect('booking_requests')
 
+        if action in ['save_patient', 'confirm']:
+            if not patient_form.is_valid():
+                return render(
+                    request,
+                    'patients/booking_confirm.html',
+                    {
+                        'booking': booking,
+                        'existing_patient': existing_patient,
+                        'patient_form': patient_form,
+                        'can_modify_patients': can_modify_patients,
+                    },
+                )
+
+            patient = patient_form.save()
+            existing_patient = patient
+
+            if action == 'save_patient':
+                messages.success(request, 'Patient information saved.')
+                return redirect('booking_confirm', pk=booking.pk)
+
+            time_obj = datetime.strptime(booking.requested_time, '%H:%M').time()
+            appointment = Appointment.objects.create(
+                patient=patient,
+                date=booking.requested_date,
+                time=time_obj,
+                visit_type=booking_visit_type_to_appointment(booking.visit_type),
+                status=Appointment.STATUS_CONFIRMED,
+                notes=booking.notes,
+            )
+
+            booking.status = 'converted'
+            booking.converted_to_appointment = appointment
+            booking.save()
+            messages.success(request, 'Booking converted to an appointment.')
+            return redirect('booking_requests')
+
         if action == 'cancel':
             booking.status = 'cancelled'
             booking.save()
@@ -522,7 +830,12 @@ def booking_confirm_view(request, pk):
     return render(
         request,
         'patients/booking_confirm.html',
-        {'booking': booking, 'existing_patient': existing_patient},
+        {
+            'booking': booking,
+            'existing_patient': existing_patient,
+            'patient_form': patient_form,
+            'can_modify_patients': can_modify_patients,
+        },
     )
 
 

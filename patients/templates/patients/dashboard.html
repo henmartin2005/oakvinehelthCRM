@@ -13,10 +13,11 @@
         <div class="panel-head"><h2>Recent Patients</h2></div>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>Name</th><th>Phone</th><th>Language</th><th>Payment Type</th><th>Status</th></tr></thead>
+                <thead><tr><th>Patient ID</th><th>Name</th><th>Phone</th><th>Language</th><th>Payment Type</th><th>Status</th></tr></thead>
                 <tbody>
                 {% for patient in recent_patients %}
                     <tr>
+                        <td><a class="patient-id-link" href="/patients/{{ patient.pk }}/edit/">{{ patient.patient_code }}</a></td>
                         <td>{{ patient.first_name }} {{ patient.last_name }}</td>
                         <td>{{ patient.phone }}</td>
                         <td>{{ patient.get_language_display }}</td>
@@ -24,7 +25,7 @@
                         <td><span class="badge {% if patient.is_active %}badge-active{% else %}badge-inactive{% endif %}">{% if patient.is_active %}Active{% else %}Inactive{% endif %}</span></td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="5" class="empty">No patients found.</td></tr>
+                    <tr><td colspan="6" class="empty">No patients found.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -35,17 +36,18 @@
         <div class="panel-head"><h2>Today's Appointments</h2></div>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>Patient</th><th>Time</th><th>Visit Type</th><th>Status</th></tr></thead>
+                <thead><tr><th>Patient ID</th><th>Patient</th><th>Time</th><th>Visit Type</th><th>Status</th></tr></thead>
                 <tbody>
                 {% for appointment in today_appointments %}
                     <tr>
-                        <td>{{ appointment.patient }}</td>
+                        <td><a class="patient-id-link" href="/patients/{{ appointment.patient.pk }}/edit/">{{ appointment.patient.patient_code }}</a></td>
+                        <td>{{ appointment.patient.first_name }} {{ appointment.patient.last_name }}</td>
                         <td>{{ appointment.time|time:"g:i A" }}</td>
                         <td>{{ appointment.get_visit_type_display }}</td>
                         <td><span class="badge badge-{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="4" class="empty">No appointments today.</td></tr>
+                    <tr><td colspan="5" class="empty">No appointments today.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

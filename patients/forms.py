@@ -1,6 +1,18 @@
 from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm, UserCreationForm
 
 from .models import Appointment, BookingConfig, Patient, Payment
+
+
+ROLE_ADMIN = 'Admin'
+ROLE_ASSISTANT = 'Assistant'
+ROLE_USER = 'User'
+ROLE_CHOICES = [
+    (ROLE_ASSISTANT, 'Assistant'),
+    (ROLE_ADMIN, 'Admin'),
+    (ROLE_USER, 'User'),
+]
 
 
 class CRMModelForm(forms.ModelForm):
@@ -10,10 +22,83 @@ class CRMModelForm(forms.ModelForm):
             field.widget.attrs['class'] = f'{css_class} crm-input'.strip()
 
 
+class CRMFormMixin:
+    def _add_crm_classes(self):
+        for field in self.fields.values():
+            widget = field.widget
+            css_class = widget.attrs.get('class', '')
+            widget.attrs['class'] = f'{css_class} crm-input'.strip()
+
+
+class CRMPasswordChangeForm(CRMFormMixin, PasswordChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._add_crm_classes()
+
+
+class CRMSetPasswordForm(CRMFormMixin, SetPasswordForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._add_crm_classes()
+
+
+class UserPasswordTargetForm(CRMFormMixin, forms.Form):
+    user = forms.ModelChoiceField(
+        queryset=get_user_model().objects.none(),
+        label='User',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['user'].queryset = get_user_model().objects.order_by('username')
+        self._add_crm_classes()
+
+
+class CRMUserCreationForm(CRMFormMixin, UserCreationForm):
+    role = forms.ChoiceField(choices=ROLE_CHOICES)
+    first_name = forms.CharField(required=False)
+    last_name = forms.CharField(required=False)
+    email = forms.EmailField(required=False)
+
+    class Meta:
+        model = get_user_model()
+        fields = ['username', 'first_name', 'last_name', 'email', 'role', 'password1', 'password2']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._add_crm_classes()
+
+
+class CRMUserUpdateForm(CRMFormMixin, forms.ModelForm):
+    role = forms.ChoiceField(choices=ROLE_CHOICES)
+
+    class Meta:
+        model = get_user_model()
+        fields = ['username', 'first_name', 'last_name', 'email', 'role', 'is_active']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            if self.instance.is_superuser or self.instance.groups.filter(name=ROLE_ADMIN).exists():
+                self.fields['role'].initial = ROLE_ADMIN
+            elif self.instance.groups.filter(name=ROLE_ASSISTANT).exists():
+                self.fields['role'].initial = ROLE_ASSISTANT
+            else:
+                self.fields['role'].initial = ROLE_USER
+        self._add_crm_classes()
+
+
 class PatientForm(CRMModelForm):
+    patient_code = forms.CharField(
+        label='Patient ID',
+        required=False,
+        disabled=True,
+    )
+
     class Meta:
         model = Patient
         fields = [
+            'patient_code',
             'first_name',
             'last_name',
             'date_of_birth',
@@ -25,13 +110,21 @@ class PatientForm(CRMModelForm):
             'is_active',
         ]
         widgets = {
-            'date_of_birth': forms.DateInput(attrs={'type': 'date'}),
+            'date_of_birth': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
             'insurance_notes': forms.Textarea(attrs={'rows': 4}),
+        }
+        labels = {
+            'insurance_notes': 'Patient profile notes',
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['patient_code'].initial = self.instance.patient_code
+        else:
+            self.fields['patient_code'].initial = 'Assigned automatically'
         self._add_crm_classes()
+        self.fields['date_of_birth'].input_formats = ['%Y-%m-%d']
 
 
 class AppointmentForm(CRMModelForm):

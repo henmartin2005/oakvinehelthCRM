@@ -34,7 +34,7 @@
                     {% for appointment in day.appointments %}
                         <div class="calendar-event">
                             <div class="calendar-time">{{ appointment.time|time:"g:i A" }}</div>
-                            <div class="calendar-patient">{{ appointment.patient }}</div>
+                            <div class="calendar-patient">{{ appointment.patient.patient_code }} - {{ appointment.patient.first_name }} {{ appointment.patient.last_name }}</div>
                             <div class="calendar-meta">{{ appointment.get_visit_type_display }} · {{ appointment.get_status_display }}</div>
                             <div class="calendar-action"><a class="btn btn-outline-muted" href="/appointments/{{ appointment.pk }}/edit/">Modify</a></div>
                         </div>
@@ -42,7 +42,7 @@
                     {% for booking in day.bookings %}
                         <div class="calendar-event pending-request">
                             <div class="calendar-time">{{ booking.requested_time }}</div>
-                            <div class="calendar-patient">{{ booking.first_name }} {{ booking.last_name }}</div>
+                            <div class="calendar-patient">{% if booking.matched_patient %}{{ booking.matched_patient.patient_code }} - {% endif %}{{ booking.first_name }} {{ booking.last_name }}</div>
                             <div class="calendar-meta">Pending booking · {{ booking.visit_type }}</div>
                             <div class="calendar-action"><a class="btn btn-outline-primary" href="/bookings/{{ booking.pk }}/review/">Agregar al calendario</a></div>
                         </div>
@@ -56,17 +56,28 @@
     </section>
 {% else %}
     <nav class="tabs">
-        <a class="page-link {% if not status_filter %}active{% endif %}" href="/bookings/?view=list">All</a>
-        <a class="page-link {% if status_filter == 'pending' %}active{% endif %}" href="/bookings/?view=list&status=pending">Pending</a>
-        <a class="page-link {% if status_filter == 'confirmed' %}active{% endif %}" href="/bookings/?view=list&status=confirmed">Confirmed</a>
-        <a class="page-link {% if status_filter == 'cancelled' %}active{% endif %}" href="/bookings/?view=list&status=cancelled">Cancelled</a>
-        <a class="page-link {% if status_filter == 'converted' %}active{% endif %}" href="/bookings/?view=list&status=converted">Converted</a>
+        <a class="page-link {% if not status_filter %}active{% endif %}" href="/bookings/?view=list{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">All</a>
+        <a class="page-link {% if status_filter == 'pending' %}active{% endif %}" href="/bookings/?view=list&status=pending{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Pending</a>
+        <a class="page-link {% if status_filter == 'confirmed' %}active{% endif %}" href="/bookings/?view=list&status=confirmed{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Confirmed</a>
+        <a class="page-link {% if status_filter == 'cancelled' %}active{% endif %}" href="/bookings/?view=list&status=cancelled{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Cancelled</a>
+        <a class="page-link {% if status_filter == 'converted' %}active{% endif %}" href="/bookings/?view=list&status=converted{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Converted</a>
     </nav>
+
+    <form class="card filter-card compact" method="get">
+        <input type="hidden" name="view" value="list">
+        {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+        <input class="crm-input" type="search" name="q" value="{{ search_query }}" placeholder="Buscar por ID, paciente, telefono o email">
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        {% if search_query %}
+            <a class="btn btn-outline-muted" href="/bookings/?view=list{% if status_filter %}&status={{ status_filter }}{% endif %}">Limpiar</a>
+        {% endif %}
+    </form>
 
     <div class="card table-wrap">
         <table>
             <thead>
                 <tr>
+                    <th>Patient ID</th>
                     <th>Patient Name</th>
                     <th>Phone</th>
                     <th>Date Requested</th>
@@ -81,6 +92,13 @@
             <tbody>
             {% for booking in bookings %}
                 <tr>
+                    <td>
+                        {% if booking.matched_patient %}
+                            <a class="patient-id-link" href="/bookings/{{ booking.pk }}/review/" title="Abrir la informacion para agregar al calendario">{{ booking.matched_patient.patient_code }}</a>
+                        {% else %}
+                            <a class="patient-id-link muted" href="/bookings/{{ booking.pk }}/review/" title="Abrir la informacion para agregar al calendario">New</a>
+                        {% endif %}
+                    </td>
                     <td>{{ booking.first_name }} {{ booking.last_name }}</td>
                     <td>{{ booking.phone }}</td>
                     <td>{{ booking.requested_date|date:"M j, Y" }}</td>
@@ -100,7 +118,7 @@
                     </td>
                 </tr>
             {% empty %}
-                <tr><td colspan="9" class="empty">No booking requests yet</td></tr>
+                <tr><td colspan="10" class="empty">No booking requests yet</td></tr>
             {% endfor %}
             </tbody>
         </table>

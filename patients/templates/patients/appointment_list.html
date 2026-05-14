@@ -11,16 +11,16 @@
 </form>
 <div class="card table-wrap">
     <table>
-        <thead><tr><th>Patient</th><th>Date</th><th>Time</th><th>Visit Type</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Patient ID</th><th>Patient</th><th>Date</th><th>Time</th><th>Visit Type</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
         <tbody>
         {% for appointment in appointments %}
             <tr>
-                <td>{{ appointment.patient }}</td><td>{{ appointment.date|date:"M j, Y" }}</td><td>{{ appointment.time|time:"g:i A" }}</td><td>{{ appointment.get_visit_type_display }}</td>
+                <td><a class="patient-id-link" href="/patients/{{ appointment.patient.pk }}/edit/">{{ appointment.patient.patient_code }}</a></td><td>{{ appointment.patient.first_name }} {{ appointment.patient.last_name }}</td><td>{{ appointment.date|date:"M j, Y" }}</td><td>{{ appointment.time|time:"g:i A" }}</td><td>{{ appointment.get_visit_type_display }}</td>
                 <td><span class="badge badge-{{ appointment.status }}">{{ appointment.get_status_display }}</span></td><td>{{ appointment.notes|default:"-"|truncatechars:50 }}</td>
                 <td><a class="btn btn-outline-muted" href="/appointments/{{ appointment.pk }}/edit/">Edit</a> <a class="btn btn-outline-primary" href="/appointments/{{ appointment.pk }}/edit/">Change Status</a></td>
             </tr>
         {% empty %}
-            <tr><td colspan="7" class="empty">No appointments found.</td></tr>
+            <tr><td colspan="8" class="empty">No appointments found.</td></tr>
         {% endfor %}
         </tbody>
     </table>
