@@ -2,6 +2,134 @@
 {% block title %}{{ form_title }} | Oak & Vine CRM{% endblock %}
 {% block page_title %}Patients{% endblock %}
 {% block content %}
+<style>
+    .patient-profile-shell { display: grid; gap: 18px; max-width: 1180px; }
+    .patient-history-card {
+        background: #ffffff;
+        border: 1px solid #e9e4f0;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #e9e4f0;
+    }
+    .history-header h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 500;
+        color: #1a1a2e;
+    }
+    .history-subtitle {
+        color: #9ca3af;
+        font-size: 11px;
+        margin-top: 3px;
+    }
+    .history-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, .9fr) minmax(420px, 1.1fr);
+        gap: 18px;
+        padding: 18px;
+    }
+    .activity-form {
+        border: 1px solid #e9e4f0;
+        border-radius: 8px;
+        padding: 14px;
+        background: #fbfaf7;
+    }
+    .activity-form h3,
+    .timeline-panel h3 {
+        margin: 0 0 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #1a1a2e;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+    }
+    .activity-form .field { margin-bottom: 12px; }
+    .activity-form label {
+        display: block;
+        margin-bottom: 6px;
+        color: #6b7280;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+    }
+    .activity-form input,
+    .activity-form select,
+    .activity-form textarea {
+        width: 100%;
+        border: 1px solid #ddd6fe;
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: #ffffff;
+        color: #1a1a2e;
+        font: inherit;
+        font-size: 12px;
+    }
+    .activity-form textarea { min-height: 88px; resize: vertical; }
+    .activity-form input:focus,
+    .activity-form select:focus,
+    .activity-form textarea:focus {
+        outline: none;
+        border-color: #9333ea;
+        box-shadow: 0 0 0 3px rgba(147, 51, 234, .12);
+    }
+    .timeline-list { display: grid; gap: 10px; }
+    .timeline-item {
+        display: grid;
+        grid-template-columns: 8px 1fr;
+        gap: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #f3f0f8;
+    }
+    .timeline-item:last-child { border-bottom: 0; padding-bottom: 0; }
+    .timeline-dot {
+        width: 8px;
+        height: 8px;
+        margin-top: 5px;
+        border-radius: 999px;
+        background: #7c2d8e;
+    }
+    .timeline-dot.appointment { background: #7c2d8e; }
+    .timeline-dot.activity { background: #3b82f6; }
+    .timeline-dot.payment { background: #f59e0b; }
+    .timeline-title {
+        color: #1a1a2e;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .timeline-meta {
+        margin-top: 2px;
+        color: #9ca3af;
+        font-size: 10px;
+    }
+    .timeline-notes {
+        margin-top: 5px;
+        color: #4b5563;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .history-columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    .history-empty {
+        color: #9ca3af;
+        font-size: 12px;
+        padding: 10px 0;
+    }
+    @media (max-width: 1000px) {
+        .history-grid, .history-columns { grid-template-columns: 1fr; }
+    }
+</style>
+<div class="patient-profile-shell">
 <form class="card form-card" method="post">
     {% csrf_token %}
     <h2>{{ form_title }}</h2>
@@ -19,4 +147,96 @@
         <div class="form-actions"><a class="btn btn-outline-muted" href="/patients/">Cancel</a><button class="btn btn-primary" type="submit">Save Patient</button></div>
     </div>
 </form>
+
+{% if patient %}
+    <section class="patient-history-card">
+        <div class="history-header">
+            <div>
+                <h2>Patient History</h2>
+                <div class="history-subtitle">Activities, appointments, and payments linked to {{ patient.first_name }} {{ patient.last_name }}</div>
+            </div>
+            <span class="badge badge-active">ID {{ patient.patient_code }}</span>
+        </div>
+        <div class="history-grid">
+            <form class="activity-form" method="post">
+                {% csrf_token %}
+                <h3>Add activity</h3>
+                <input type="hidden" name="action" value="add_activity">
+                <div class="field">
+                    <label for="activity_type">Type</label>
+                    <select id="activity_type" name="activity_type">
+                        {% for value, label in activity_type_choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="activity_title">Activity</label>
+                    <input id="activity_title" name="activity_title" type="text" placeholder="Example: Follow-up call completed">
+                </div>
+                <div class="field">
+                    <label for="activity_notes">Notes</label>
+                    <textarea id="activity_notes" name="activity_notes" placeholder="Add internal notes for this patient..."></textarea>
+                </div>
+                <button class="btn btn-primary" type="submit">Save activity</button>
+            </form>
+
+            <div class="history-columns">
+                <div class="timeline-panel">
+                    <h3>Activities</h3>
+                    <div class="timeline-list">
+                        {% for activity in patient_activities %}
+                            <div class="timeline-item">
+                                <span class="timeline-dot activity"></span>
+                                <div>
+                                    <div class="timeline-title">{{ activity.title }}</div>
+                                    <div class="timeline-meta">{{ activity.get_activity_type_display }} · {{ activity.created_at|date:"M j, Y" }} · {{ activity.created_at|time:"g:i A" }} · {{ activity.user_name|default:"System" }}</div>
+                                    {% if activity.notes %}<div class="timeline-notes">{{ activity.notes }}</div>{% endif %}
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="history-empty">No activities recorded yet.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="timeline-panel">
+                    <h3>Appointments</h3>
+                    <div class="timeline-list">
+                        {% for appointment in patient_appointments %}
+                            <div class="timeline-item">
+                                <span class="timeline-dot appointment"></span>
+                                <div>
+                                    <div class="timeline-title">{{ appointment.date|date:"M j, Y" }} at {{ appointment.time|time:"g:i A" }}</div>
+                                    <div class="timeline-meta">{{ appointment.get_visit_type_display }} · {{ appointment.get_status_display }}</div>
+                                    {% if appointment.notes %}<div class="timeline-notes">{{ appointment.notes|truncatechars:120 }}</div>{% endif %}
+                                    <div class="timeline-meta"><a class="panel-link" style="display:inline-flex; padding:6px 0 0;" href="/appointments/{{ appointment.pk }}/edit/">Open appointment</a></div>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="history-empty">No appointments recorded yet.</div>
+                        {% endfor %}
+                    </div>
+
+                    <h3 style="margin-top:18px;">Payments</h3>
+                    <div class="timeline-list">
+                        {% for payment in patient_payments %}
+                            <div class="timeline-item">
+                                <span class="timeline-dot payment"></span>
+                                <div>
+                                    <div class="timeline-title">${{ payment.amount }} · {{ payment.get_payment_method_display }}</div>
+                                    <div class="timeline-meta">{{ payment.date|date:"M j, Y" }}</div>
+                                    {% if payment.notes %}<div class="timeline-notes">{{ payment.notes|truncatechars:120 }}</div>{% endif %}
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="history-empty">No payments recorded yet.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endif %}
+</div>
 {% endblock %}

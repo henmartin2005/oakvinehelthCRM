@@ -2,75 +2,212 @@
 {% block title %}Review Booking | Oak & Vine CRM{% endblock %}
 {% block page_title %}Review Booking Request{% endblock %}
 {% block content %}
-<div class="card form-card">
-    <a class="panel-link" href="/bookings/">Back to booking requests</a>
+<style>
+    :root { --color-background-secondary: #f3f4f6; }
+    .booking-page { padding: 0; }
+    .booking-back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; color: #7c2d8e; font-size: 13px; font-weight: 800; }
+    .duplicate-alert { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 16px; border: 1px solid #fde047; border-radius: 8px; background: #fef9c3; color: #854d0e; padding: 12px 14px; font-size: 13px; font-weight: 700; }
+    .review-card { background: #fff; border: .5px solid #e5e7eb; border-radius: 12px; box-shadow: none; overflow: hidden; max-width: 1120px; }
+    .patient-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 24px; border-bottom: .5px solid #e5e7eb; }
+    .patient-identity { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .patient-avatar { display: inline-flex; width: 48px; height: 48px; border-radius: 999px; align-items: center; justify-content: center; background: #f3e8ff; color: #7c2d8e; font-weight: 800; }
+    .patient-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .patient-title h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+    .patient-id { color: #6b7280; font-size: 12px; font-weight: 700; }
+    .patient-contact { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; color: #6b7280; font-size: 13px; font-weight: 600; }
+    .review-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+    .review-badge.pending { background: #fef9c3; color: #854d0e; }
+    .review-badge.converted { background: #dbeafe; color: #1e40af; }
+    .review-badge.cancelled { background: #fee2e2; color: #991b1b; }
+    .review-tabs { display: flex; gap: 20px; padding: 0 24px; border-bottom: .5px solid #e5e7eb; }
+    .review-tab { appearance: none; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 14px 0 12px; color: #6b7280; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; }
+    .review-tab.active { color: #111827; border-bottom-color: #7c2d8e; }
+    .review-tab[hidden] { display: none; }
+    .review-body { padding: 24px; }
+    .review-panel[hidden] { display: none; }
+    .section-heading { margin: 0 0 14px; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; color: #374151; }
+    .review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .review-field.full { grid-column: 1 / -1; }
+    .review-field label { display: block; margin-bottom: 6px; color: #6b7280; font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+    .review-field .crm-input { width: 100%; border: .5px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 13px; min-height: 36px; }
+    .review-field textarea.crm-input { resize: vertical; min-height: 88px; }
+    .review-field .crm-input:focus { border-color: #9333ea; box-shadow: 0 0 0 2px #f3e8ff; outline: 0; }
+    .review-checkbox { display: flex; align-items: center; gap: 10px; }
+    .review-checkbox label { margin: 0; color: #374151; font-size: 13px; text-transform: none; letter-spacing: 0; }
+    .appointment-box { background: var(--color-background-secondary); border-radius: 10px; padding: 18px; }
+    .detail-tile { background: #fff; border: .5px solid #e5e7eb; border-radius: 8px; padding: 11px 12px; }
+    .detail-tile span { display: block; margin-bottom: 5px; color: #6b7280; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+    .detail-tile strong { font-size: 13px; color: #111827; }
+    .activity-list { display: grid; gap: 14px; }
+    .activity-item { display: grid; grid-template-columns: 12px 1fr; gap: 12px; align-items: start; }
+    .activity-dot { width: 9px; height: 9px; margin-top: 5px; border-radius: 999px; background: #3b82f6; }
+    .activity-dot.warning { background: #f59e0b; }
+    .activity-dot.admin { background: #7c2d8e; }
+    .activity-action { font-size: 13px; font-weight: 800; color: #111827; }
+    .activity-meta { margin-top: 3px; color: #6b7280; font-size: 12px; }
+    .audit-footer { display: flex; gap: 10px; align-items: center; margin-top: 18px; border-radius: 8px; background: #f3f4f6; color: #4b5563; padding: 12px 14px; font-size: 12px; font-weight: 800; }
+    .review-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 24px; border-top: .5px solid #e5e7eb; }
+    .action-right { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .cancel-modal { position: fixed; inset: 0; display: none; place-items: center; background: rgba(17,24,39,.45); z-index: 40; padding: 20px; }
+    .cancel-modal.open { display: grid; }
+    .cancel-dialog { width: min(100%, 420px); background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 20px 45px rgba(0,0,0,.18); }
+    .cancel-dialog h3 { margin: 0 0 8px; font-size: 18px; }
+    .cancel-dialog p { margin: 0 0 18px; color: #6b7280; font-size: 14px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    @media (max-width: 760px) {
+        .patient-header, .review-actions { align-items: flex-start; flex-direction: column; }
+        .review-grid { grid-template-columns: 1fr; }
+        .review-field.full { grid-column: auto; }
+        .review-tabs { overflow-x: auto; }
+        .action-right { width: 100%; justify-content: stretch; }
+        .action-right .btn, .review-actions .btn { width: 100%; }
+    }
+</style>
+
+<div class="booking-page">
+    <a class="booking-back" href="/bookings/"><span aria-hidden="true">&larr;</span> Back to booking requests</a>
 
     {% if existing_patient %}
-        <div class="alert alert-warning">A patient with this phone number already exists: {{ existing_patient }}.</div>
-    {% endif %}
-
-    {% if booking.converted_to_appointment %}
-        <div class="alert alert-info">This booking is already on the calendar. You can modify the appointment from here.</div>
-    {% elif booking.status == 'pending' %}
-        <div class="action-bar">
-            <span class="week-title">Ready to add this request to the appointment calendar.</span>
-            <span class="badge badge-pending">Review patient details first</span>
+        <div class="duplicate-alert">
+            <span aria-hidden="true">!</span>
+            <span>Patient with this phone already exists: {{ existing_patient.patient_code }} - {{ existing_patient.first_name }} {{ existing_patient.last_name }}</span>
         </div>
     {% endif %}
 
-    <form class="settings-section" method="post">
+    <form id="reviewForm" method="post">
         {% csrf_token %}
-        <h2>Patient Information</h2>
-        <div class="form-grid">
-            {% for field in patient_form %}
-                <div class="field {% if field.name == 'insurance_notes' %}full{% endif %} {% if field.name == 'is_active' %}checkbox-field{% endif %}">
-                    {% if field.name == 'is_active' %}
-                        {{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {% else %}
-                        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
-                    {% endif %}
-                    {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        <div class="review-card">
+            <header class="patient-header">
+                <div class="patient-identity">
+                    <div class="patient-avatar">{{ booking.first_name|first }}{{ booking.last_name|first }}</div>
+                    <div>
+                        <div class="patient-title">
+                            <h2>{{ booking.first_name }} {{ booking.last_name }}</h2>
+                            <span class="patient-id">ID {% if existing_patient %}{{ existing_patient.patient_code }}{% else %}Pending{% endif %}</span>
+                        </div>
+                        <div class="patient-contact">
+                            <span>Phone: {{ booking.phone }}</span>
+                            <span>Email: {{ booking.email|default:"-" }}</span>
+                        </div>
+                    </div>
                 </div>
-            {% endfor %}
+                <span class="review-badge {{ booking.status }}">{{ booking.get_status_display }}</span>
+            </header>
+
+            <nav class="review-tabs" aria-label="Booking review tabs">
+                <button class="review-tab active" type="button" data-tab="patient">Patient info</button>
+                <button class="review-tab" type="button" data-tab="appointment">Appointment</button>
+                <button class="review-tab" type="button" data-tab="activity" {% if not can_view_activity_log %}hidden{% endif %}>Activity log</button>
+            </nav>
+
+            <div class="review-body">
+                <section class="review-panel" data-panel="patient">
+                    <h3 class="section-heading">Patient info</h3>
+                    <div class="review-grid">
+                        <div class="review-field"><label for="{{ patient_form.first_name.id_for_label }}">First name</label>{{ patient_form.first_name }}{% for error in patient_form.first_name.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                        <div class="review-field"><label for="{{ patient_form.last_name.id_for_label }}">Last name</label>{{ patient_form.last_name }}{% for error in patient_form.last_name.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                        <div class="review-field"><label for="{{ patient_form.phone.id_for_label }}">Phone</label>{{ patient_form.phone }}{% for error in patient_form.phone.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                        <div class="review-field"><label for="{{ patient_form.email.id_for_label }}">Email</label>{{ patient_form.email }}{% for error in patient_form.email.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                        <div class="review-field"><label for="{{ patient_form.date_of_birth.id_for_label }}">Date of birth</label>{{ patient_form.date_of_birth }}{% for error in patient_form.date_of_birth.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                        <div class="review-field"><label for="{{ patient_form.language.id_for_label }}">Language</label>{{ patient_form.language }}{% for error in patient_form.language.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                        <div class="review-field full"><label for="{{ patient_form.insurance_notes.id_for_label }}">Profile notes</label>{{ patient_form.insurance_notes }}{% for error in patient_form.insurance_notes.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                        <div class="review-field full review-checkbox">{{ patient_form.is_active }}<label for="{{ patient_form.is_active.id_for_label }}">Active patient</label>{% for error in patient_form.is_active.errors %}<div class="field-error">{{ error }}</div>{% endfor %}</div>
+                    </div>
+                </section>
+
+                <section class="review-panel" data-panel="appointment" hidden>
+                    <h3 class="section-heading">Appointment</h3>
+                    <div class="appointment-box">
+                        <div class="review-grid">
+                            <div class="detail-tile"><span>Date</span><strong>{{ booking.requested_date|date:"M j, Y" }}</strong></div>
+                            <div class="detail-tile"><span>Time</span><strong>{{ booking.requested_time }}</strong></div>
+                            <div class="detail-tile"><span>Visit type</span><strong>{{ booking.visit_type }}</strong></div>
+                            <div class="detail-tile"><span>New patient</span><strong>{% if booking.is_new_patient %}Yes{% else %}No{% endif %}</strong></div>
+                        </div>
+                    </div>
+                    <div class="review-field full" style="margin-top:16px;">
+                        <label for="appointmentNotes">Internal notes for this appointment</label>
+                        <textarea id="appointmentNotes" class="crm-input" name="appointment_notes" rows="3">{{ booking.notes }}</textarea>
+                    </div>
+                </section>
+
+                {% if can_view_activity_log %}
+                    <section class="review-panel" data-panel="activity" hidden>
+                        <h3 class="section-heading">Activity log</h3>
+                        <div class="activity-list">
+                            {% for log in booking_logs %}
+                                <div class="activity-item">
+                                    <span class="activity-dot {{ log.log_type }}"></span>
+                                    <div>
+                                        <div class="activity-action">{{ log.action }}</div>
+                                        <div class="activity-meta">{{ log.created_at|date:"M j, Y" }} · {{ log.created_at|time:"g:i A" }} · {{ log.user_name|default:"System" }}</div>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="activity-meta">No activity yet.</div>
+                            {% endfor %}
+                        </div>
+                        <div class="audit-footer"><span aria-hidden="true">[]</span> Full audit log - visible to Super Admin only</div>
+                    </section>
+                {% endif %}
+            </div>
+
+            <footer class="review-actions">
+                <button class="btn btn-outline-danger" type="button" id="openCancelModal" {% if booking.status != 'pending' %}disabled{% endif %}>Cancel request</button>
+                <div class="action-right">
+                    {% if can_modify_patients %}
+                        <button class="btn btn-outline-primary" type="submit" name="action" value="save_patient">Save patient</button>
+                    {% else %}
+                        <span class="badge badge-inactive">Patient data is read only</span>
+                    {% endif %}
+                    {% if booking.converted_to_appointment %}
+                        <a class="btn btn-primary" href="/appointments/{{ booking.converted_to_appointment.pk }}/edit/">Open appointment</a>
+                    {% elif booking.status == 'pending' %}
+                        <button class="btn btn-primary" type="submit" name="action" value="confirm">Add to calendar</button>
+                    {% endif %}
+                </div>
+            </footer>
         </div>
-        <div class="action-bar">
-            {% if can_modify_patients %}
-                <button class="btn btn-outline-primary" type="submit" name="action" value="save_patient">Guardar datos del paciente</button>
-            {% else %}
-                <span class="badge badge-inactive">Patient data is read only</span>
-            {% endif %}
-            {% if booking.converted_to_appointment %}
-                <a class="btn btn-primary primary-action" href="/appointments/{{ booking.converted_to_appointment.pk }}/edit/">Modificar cita</a>
-            {% elif booking.status == 'pending' %}
-                <button class="btn btn-primary primary-action" type="submit" name="action" value="confirm">Guardar y agregar al calendario</button>
-            {% endif %}
+
+        <div class="cancel-modal" id="cancelModal" role="dialog" aria-modal="true" aria-labelledby="cancelTitle">
+            <div class="cancel-dialog">
+                <h3 id="cancelTitle">Cancel request?</h3>
+                <p>This will mark the booking request as cancelled and record the action in the activity log.</p>
+                <div class="modal-actions">
+                    <button class="btn btn-outline-muted" type="button" id="closeCancelModal">Keep request</button>
+                    <button class="btn btn-outline-danger" type="submit" name="action" value="cancel">Cancel request</button>
+                </div>
+            </div>
         </div>
     </form>
-
-    <section class="settings-section">
-        <h2>Requested Appointment</h2>
-        <div class="detail-grid">
-            <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">{{ booking.requested_date|date:"M j, Y" }}</div></div>
-            <div class="detail-item"><div class="detail-label">Time</div><div class="detail-value">{{ booking.requested_time }}</div></div>
-            <div class="detail-item"><div class="detail-label">Visit Type</div><div class="detail-value">{{ booking.visit_type }}</div></div>
-            <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="badge badge-{{ booking.status }}">{{ booking.get_status_display }}</span></div></div>
-            <div class="detail-item" style="grid-column:1 / -1;"><div class="detail-label">Notes</div><div class="detail-value">{{ booking.notes|default:"-" }}</div></div>
-        </div>
-    </section>
-
-    {% if booking.converted_to_appointment %}
-        <div class="action-bar">
-            <a class="btn btn-outline-muted" href="/bookings/">Back</a>
-        </div>
-    {% elif booking.status == 'pending' %}
-        <form class="action-bar" method="post">
-            {% csrf_token %}
-            <button class="btn btn-outline-danger" type="submit" name="action" value="cancel">Cancel Request</button>
-        </form>
-    {% else %}
-        <div class="action-bar">
-            <a class="btn btn-outline-muted" href="/bookings/">Back</a>
-        </div>
-    {% endif %}
 </div>
+
+<script>
+    document.querySelectorAll('.review-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            var target = tab.dataset.tab;
+            document.querySelectorAll('.review-tab').forEach(function(item) {
+                item.classList.toggle('active', item === tab);
+            });
+            document.querySelectorAll('.review-panel').forEach(function(panel) {
+                panel.hidden = panel.dataset.panel !== target;
+            });
+        });
+    });
+
+    var modal = document.getElementById('cancelModal');
+    var openCancel = document.getElementById('openCancelModal');
+    var closeCancel = document.getElementById('closeCancelModal');
+    if (openCancel && modal) {
+        openCancel.addEventListener('click', function() { modal.classList.add('open'); });
+    }
+    if (closeCancel && modal) {
+        closeCancel.addEventListener('click', function() { modal.classList.remove('open'); });
+    }
+    if (modal) {
+        modal.addEventListener('click', function(event) {
+            if (event.target === modal) { modal.classList.remove('open'); }
+        });
+    }
+</script>
 {% endblock %}

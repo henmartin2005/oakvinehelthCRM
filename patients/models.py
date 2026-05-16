@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class Patient(models.Model):
@@ -117,6 +118,36 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'{self.patient} - {self.amount}'
+
+
+class PatientActivity(models.Model):
+    TYPE_NOTE = 'note'
+    TYPE_CALL = 'call'
+    TYPE_FOLLOWUP = 'followup'
+    TYPE_ADMIN = 'admin'
+    ACTIVITY_TYPE_CHOICES = [
+        (TYPE_NOTE, 'Note'),
+        (TYPE_CALL, 'Call'),
+        (TYPE_FOLLOWUP, 'Follow-up'),
+        (TYPE_ADMIN, 'Admin'),
+    ]
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='activities')
+    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, default=TYPE_NOTE)
+    title = models.CharField(max_length=160)
+    notes = models.TextField(blank=True)
+    user_id = models.CharField(max_length=64, blank=True)
+    user_name = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['patient', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.patient} - {self.title}'
 
 
 class BookingConfig(models.Model):
@@ -243,3 +274,35 @@ class BookingRequest(models.Model):
 
     def __str__(self):
         return f'{self.first_name} {self.last_name} - {self.requested_date}'
+
+
+class BookingLog(models.Model):
+    LOG_SYSTEM = 'system'
+    LOG_WARNING = 'warning'
+    LOG_ADMIN = 'admin'
+    LOG_TYPE_CHOICES = [
+        (LOG_SYSTEM, 'System/auto'),
+        (LOG_WARNING, 'Alert/warning'),
+        (LOG_ADMIN, 'Admin action'),
+    ]
+
+    booking = models.ForeignKey(
+        BookingRequest,
+        on_delete=models.CASCADE,
+        related_name='logs',
+    )
+    action = models.TextField()
+    log_type = models.CharField(max_length=20, choices=LOG_TYPE_CHOICES, default=LOG_SYSTEM)
+    user_id = models.CharField(max_length=64, blank=True)
+    user_name = models.CharField(max_length=150, blank=True)
+    details = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['booking']),
+        ]
+
+    def __str__(self):
+        return f'{self.booking_id} - {self.action}'

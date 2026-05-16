@@ -12,7 +12,13 @@
                 {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
             </div>
         {% endfor %}
-        <div class="form-actions"><a class="btn btn-outline-muted" href="/appointments/">Cancel</a><button class="btn btn-primary" type="submit">Save Appointment</button></div>
+        <div class="form-actions">
+            {% if appointment and appointment.patient_id %}
+                <a class="btn btn-outline-primary" href="/patients/{{ appointment.patient_id }}/edit/">Ir al perfil del paciente</a>
+            {% endif %}
+            <a class="btn btn-outline-muted" href="/appointments/">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Appointment</button>
+        </div>
     </div>
 </form>
 {% endblock %}

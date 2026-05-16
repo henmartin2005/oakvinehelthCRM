@@ -2,6 +2,77 @@
 {% block title %}Dashboard | Oak & Vine CRM{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 {% block content %}
+<style>
+    .dashboard-section { margin-top: 20px; }
+    .section-card {
+        background: #ffffff;
+        border: 1px solid #e9e4f0;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: none;
+    }
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e9e4f0;
+    }
+    .section-header h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 500;
+        color: #1a1a2e;
+    }
+    .section-badge {
+        font-size: 10px;
+        background: #f3e8ff;
+        color: #7c2d8e;
+        border: 1px solid #ddd6fe;
+        border-radius: 4px;
+        padding: 2px 8px;
+        font-weight: 500;
+    }
+    .log-list { padding: 8px 0; }
+    .log-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 8px 16px;
+        border-bottom: 1px solid #f8f6f0;
+    }
+    .log-row:last-child { border-bottom: none; }
+    .log-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        margin-top: 4px;
+        flex-shrink: 0;
+    }
+    .log-dot--system { background: #3b82f6; }
+    .log-dot--warning { background: #f59e0b; }
+    .log-dot--admin { background: #7c2d8e; }
+    .log-body {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .log-action {
+        font-size: 12px;
+        color: #1a1a2e;
+        font-weight: 500;
+    }
+    .log-meta {
+        font-size: 10px;
+        color: #9ca3af;
+    }
+    .log-empty {
+        font-size: 12px;
+        color: #9ca3af;
+        text-align: center;
+        padding: 20px;
+    }
+</style>
 <section class="stats-grid">
     <div class="card stat-card"><div class="stat-top"><span>Total Patients</span><span>👥</span></div><div class="stat-value">{{ total_patients }}</div></div>
     <div class="card stat-card"><div class="stat-top"><span>Today's Appointments</span><span>📅</span></div><div class="stat-value">{{ today_appointments_count }}</div></div>
@@ -55,4 +126,34 @@
         <a class="panel-link" href="/appointments/">View all</a>
     </div>
 </section>
+{% if request.user.is_superuser %}
+    <div class="dashboard-section">
+        <div class="section-card">
+            <div class="section-header">
+                <h2>Activity Log</h2>
+                <span class="section-badge">Super Admin</span>
+            </div>
+            <div class="log-list">
+                {% for log in recent_logs %}
+                    <div class="log-row">
+                        <span class="log-dot log-dot--{{ log.log_type }}"></span>
+                        <div class="log-body">
+                            <span class="log-action">{{ log.action }}</span>
+                            <span class="log-meta">
+                                {{ log.created_at|date:"M d, Y" }} &middot;
+                                {{ log.created_at|time:"h:i A" }} &middot;
+                                {{ log.user_name|default:"System" }}
+                                {% if log.booking %}
+                                    &middot; Booking #{{ log.booking.id }}
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="log-empty">No activity recorded yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+{% endif %}
 {% endblock %}

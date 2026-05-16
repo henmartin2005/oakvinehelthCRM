@@ -1,6 +1,6 @@
-import json
 import calendar
-from datetime import datetime, timedelta
+import json
+from datetime import date, datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
@@ -27,7 +27,7 @@ from .forms import (
     ROLE_USER,
     UserPasswordTargetForm,
 )
-from .models import Appointment, BookingConfig, BookingRequest, Patient, Payment
+from .models import Appointment, BookingConfig, BookingLog, BookingRequest, Patient, PatientActivity, Payment
 
 
 def money_sum(queryset):
@@ -168,6 +168,51 @@ def booking_patient_initial(booking):
         'payment_type': Patient.PAYMENT_CASH,
         'is_active': True,
     }
+
+
+def booking_user_name(user):
+    full_name = user.get_full_name().strip()
+    return full_name or user.get_username()
+
+
+def log_booking_event(booking, action, user=None, log_type=BookingLog.LOG_SYSTEM, details=None, created_at=None):
+    log_data = {
+        'booking': booking,
+        'action': action,
+        'log_type': log_type,
+        'details': details or {},
+    }
+    if user and user.is_authenticated:
+        log_data['user_id'] = str(user.pk)
+        log_data['user_name'] = booking_user_name(user)
+    if created_at:
+        log_data['created_at'] = created_at
+    return BookingLog.objects.create(**log_data)
+
+
+def ensure_booking_default_logs(booking, existing_patient=None):
+    BookingLog.objects.get_or_create(
+        booking=booking,
+        action='Booking request received',
+        defaults={
+            'log_type': BookingLog.LOG_SYSTEM,
+            'created_at': booking.created_at,
+            'details': {'source': 'online_booking'},
+        },
+    )
+    if existing_patient:
+        BookingLog.objects.get_or_create(
+            booking=booking,
+            action='Duplicate phone detected',
+            defaults={
+                'log_type': BookingLog.LOG_WARNING,
+                'details': {
+                    'patient_id': existing_patient.patient_code,
+                    'patient_name': f'{existing_patient.first_name} {existing_patient.last_name}',
+                    'phone': booking.phone,
+                },
+            },
+        )
 
 
 def attach_patients_to_bookings(bookings):
@@ -402,6 +447,10 @@ def dashboard_view(request):
         'recent_patients': Patient.objects.order_by('-created_at')[:5],
         'today_appointments': today_appointments,
     }
+    if request.user.is_superuser:
+        context['recent_logs'] = BookingLog.objects.select_related('booking').order_by('-created_at')[:15]
+    else:
+        context['recent_logs'] = []
     return render(request, 'patients/dashboard.html', context)
 
 
@@ -582,9 +631,16 @@ def patient_create_view(request):
         return redirect('patient_list')
     form = PatientForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        patient = form.save()
+        PatientActivity.objects.create(
+            patient=patient,
+            activity_type=PatientActivity.TYPE_ADMIN,
+            title='Patient profile created',
+            user_id=str(request.user.pk),
+            user_name=booking_user_name(request.user),
+        )
         return redirect('patient_list')
-    return render(request, 'patients/patient_form.html', {'form': form, 'form_title': 'New Patient'})
+    return render(request, 'patients/patient_form.html', {'form': form, 'form_title': 'New Patient', 'patient': None})
 
 
 @login_required
@@ -594,10 +650,115 @@ def patient_update_view(request, pk):
         return redirect('patient_list')
     patient = get_object_or_404(Patient, pk=pk)
     form = PatientForm(request.POST or None, instance=patient)
-    if request.method == 'POST' and form.is_valid():
-        form.save()
-        return redirect('patient_list')
-    return render(request, 'patients/patient_form.html', {'form': form, 'form_title': 'Edit Patient'})
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'add_activity':
+            title = request.POST.get('activity_title', '').strip()
+            notes = request.POST.get('activity_notes', '').strip()
+            activity_type = request.POST.get('activity_type', PatientActivity.TYPE_NOTE)
+            valid_types = {choice[0] for choice in PatientActivity.ACTIVITY_TYPE_CHOICES}
+            if not title:
+                messages.error(request, 'Activity title is required.')
+            else:
+                PatientActivity.objects.create(
+                    patient=patient,
+                    activity_type=activity_type if activity_type in valid_types else PatientActivity.TYPE_NOTE,
+                    title=title,
+                    notes=notes,
+                    user_id=str(request.user.pk),
+                    user_name=booking_user_name(request.user),
+                )
+                messages.success(request, 'Patient activity saved.')
+                return redirect('patient_update', pk=patient.pk)
+        elif form.is_valid():
+            changed_fields = list(form.changed_data)
+            form.save()
+            if changed_fields:
+                PatientActivity.objects.create(
+                    patient=patient,
+                    activity_type=PatientActivity.TYPE_ADMIN,
+                    title='Patient profile updated',
+                    notes=', '.join(changed_fields),
+                    user_id=str(request.user.pk),
+                    user_name=booking_user_name(request.user),
+                )
+            return redirect('patient_list')
+
+    patient_appointments = Appointment.objects.filter(patient=patient).order_by('-date', '-time')[:20]
+    patient_payments = Payment.objects.filter(patient=patient).order_by('-date', '-id')[:10]
+    patient_activities = PatientActivity.objects.filter(patient=patient).order_by('-created_at')[:20]
+    return render(
+        request,
+        'patients/patient_form.html',
+        {
+            'form': form,
+            'form_title': 'Edit Patient',
+            'patient': patient,
+            'patient_appointments': patient_appointments,
+            'patient_payments': patient_payments,
+            'patient_activities': patient_activities,
+            'activity_type_choices': PatientActivity.ACTIVITY_TYPE_CHOICES,
+        },
+    )
+
+
+@login_required
+def appointment_calendar_view(request):
+    today = date.today()
+    days_since_monday = today.weekday()
+    current_monday = today - timedelta(days=days_since_monday)
+    start_date = current_monday - timedelta(weeks=1)
+    end_date = start_date + timedelta(weeks=4) - timedelta(days=1)
+
+    appointments = Appointment.objects.filter(
+        date__gte=start_date,
+        date__lte=end_date,
+    ).select_related('patient').order_by('date', 'time')
+
+    appt_by_date = {}
+    for appt in appointments:
+        key = appt.date.strftime('%Y-%m-%d')
+        appt_by_date.setdefault(key, []).append(
+            {
+                'id': appt.id,
+                'time': appt.time.strftime('%I:%M %p') if appt.time else '',
+                'patient_id': appt.patient.patient_code,
+                'patient_name': f'{appt.patient.first_name} {appt.patient.last_name}',
+                'visit_type': appt.get_visit_type_display() if appt.visit_type else '',
+                'status': appt.status or Appointment.STATUS_CONFIRMED,
+            }
+        )
+
+    days = []
+    current = start_date
+    while current <= end_date:
+        days.append(
+            {
+                'date': current,
+                'key': current.strftime('%Y-%m-%d'),
+                'day_num': current.day,
+                'weekday': current.strftime('%a'),
+                'is_today': current == today,
+                'is_current_month': current.month == today.month,
+            }
+        )
+        current += timedelta(days=1)
+
+    weeks = [days[i:i + 7] for i in range(0, 28, 7)]
+
+    return render(
+        request,
+        'patients/appointments_calendar.html',
+        {
+            'weeks': weeks,
+            'appt_by_date': json.dumps(appt_by_date),
+            'appt_by_date_raw': appt_by_date,
+            'start_date': start_date,
+            'end_date': end_date,
+            'today': today,
+            'current_view': 'month',
+        },
+    )
 
 
 @login_required
@@ -629,8 +790,8 @@ def appointment_create_view(request):
     form = AppointmentForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         form.save()
-        return redirect('appointment_list')
-    return render(request, 'patients/appointment_form.html', {'form': form, 'form_title': 'New Appointment'})
+        return redirect('appointments_calendar')
+    return render(request, 'patients/appointment_form.html', {'form': form, 'form_title': 'New Appointment', 'appointment': None})
 
 
 @login_required
@@ -639,8 +800,8 @@ def appointment_update_view(request, pk):
     form = AppointmentForm(request.POST or None, instance=appointment)
     if request.method == 'POST' and form.is_valid():
         form.save()
-        return redirect('appointment_list')
-    return render(request, 'patients/appointment_form.html', {'form': form, 'form_title': 'Edit Appointment'})
+        return redirect('appointments_calendar')
+    return render(request, 'patients/appointment_form.html', {'form': form, 'form_title': 'Edit Appointment', 'appointment': appointment})
 
 
 @login_required
@@ -739,14 +900,33 @@ def booking_confirm_view(request, pk):
     booking = get_object_or_404(BookingRequest, pk=pk)
     existing_patient = find_existing_patient(phone=booking.phone, email=booking.email)
     can_modify_patients = not is_crm_assistant(request.user)
+    can_view_activity_log = request.user.is_superuser
+    ensure_booking_default_logs(booking, existing_patient)
     patient_form = PatientForm(
         request.POST or None,
         instance=existing_patient,
         initial=booking_patient_initial(booking),
         prefix='patient',
     )
+    patient_form.fields.pop('patient_code', None)
+    patient_form.fields.pop('payment_type', None)
+    patient_form.fields['insurance_notes'].widget.attrs['rows'] = 3
     if not can_modify_patients:
         disable_form_fields(patient_form)
+
+    def render_booking_confirm():
+        return render(
+            request,
+            'patients/booking_confirm.html',
+            {
+                'booking': booking,
+                'existing_patient': existing_patient,
+                'patient_form': patient_form,
+                'can_modify_patients': can_modify_patients,
+                'can_view_activity_log': can_view_activity_log,
+                'booking_logs': booking.logs.all(),
+            },
+        )
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -776,32 +956,48 @@ def booking_confirm_view(request, pk):
                 time=time_obj,
                 visit_type=booking_visit_type_to_appointment(booking.visit_type),
                 status=Appointment.STATUS_CONFIRMED,
-                notes=booking.notes,
+                notes=request.POST.get('appointment_notes', booking.notes),
             )
 
             booking.status = 'converted'
             booking.converted_to_appointment = appointment
             booking.save()
+            log_booking_event(
+                booking,
+                'Status changed to Converted',
+                request.user,
+                BookingLog.LOG_ADMIN,
+                {'appointment_id': appointment.pk},
+            )
+            log_booking_event(
+                booking,
+                'Added to calendar',
+                request.user,
+                BookingLog.LOG_ADMIN,
+                {'appointment_id': appointment.pk},
+            )
             messages.success(request, 'Booking converted to an appointment.')
             return redirect('booking_requests')
 
         if action in ['save_patient', 'confirm']:
             if not patient_form.is_valid():
-                return render(
-                    request,
-                    'patients/booking_confirm.html',
-                    {
-                        'booking': booking,
-                        'existing_patient': existing_patient,
-                        'patient_form': patient_form,
-                        'can_modify_patients': can_modify_patients,
-                    },
-                )
+                return render_booking_confirm()
 
+            is_new_patient_record = not (patient_form.instance and patient_form.instance.pk)
+            changed_fields = list(patient_form.changed_data)
             patient = patient_form.save()
             existing_patient = patient
+            if is_new_patient_record:
+                changed_fields = list(patient_form.cleaned_data.keys())
 
             if action == 'save_patient':
+                log_booking_event(
+                    booking,
+                    'Patient data updated',
+                    request.user,
+                    BookingLog.LOG_ADMIN,
+                    {'fields': changed_fields},
+                )
                 messages.success(request, 'Patient information saved.')
                 return redirect('booking_confirm', pk=booking.pk)
 
@@ -812,31 +1008,51 @@ def booking_confirm_view(request, pk):
                 time=time_obj,
                 visit_type=booking_visit_type_to_appointment(booking.visit_type),
                 status=Appointment.STATUS_CONFIRMED,
-                notes=booking.notes,
+                notes=request.POST.get('appointment_notes', booking.notes),
             )
 
             booking.status = 'converted'
             booking.converted_to_appointment = appointment
             booking.save()
+            if changed_fields:
+                log_booking_event(
+                    booking,
+                    'Patient data edited',
+                    request.user,
+                    BookingLog.LOG_ADMIN,
+                    {'fields': changed_fields},
+                )
+            log_booking_event(
+                booking,
+                'Status changed to Converted',
+                request.user,
+                BookingLog.LOG_ADMIN,
+                {'appointment_id': appointment.pk},
+            )
+            log_booking_event(
+                booking,
+                'Added to calendar',
+                request.user,
+                BookingLog.LOG_ADMIN,
+                {'appointment_id': appointment.pk},
+            )
             messages.success(request, 'Booking converted to an appointment.')
             return redirect('booking_requests')
 
         if action == 'cancel':
             booking.status = 'cancelled'
             booking.save()
+            log_booking_event(
+                booking,
+                'Request cancelled',
+                request.user,
+                BookingLog.LOG_ADMIN,
+                {'status': booking.status},
+            )
             messages.success(request, 'Booking request cancelled.')
             return redirect('booking_requests')
 
-    return render(
-        request,
-        'patients/booking_confirm.html',
-        {
-            'booking': booking,
-            'existing_patient': existing_patient,
-            'patient_form': patient_form,
-            'can_modify_patients': can_modify_patients,
-        },
-    )
+    return render_booking_confirm()
 
 
 @login_required
