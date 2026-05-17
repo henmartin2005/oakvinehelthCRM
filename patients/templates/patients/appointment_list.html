@@ -3,7 +3,7 @@
 {% block page_title %}Appointments{% endblock %}
 {% block content %}
 <div class="toolbar"><div></div><a class="btn btn-primary" href="/appointments/new/">+ New Appointment</a></div>
-<form class="card filter-card compact" method="get">
+<form class="card filter-card compact auto-filter-form" method="get">
     <input class="crm-input" type="date" name="date" value="{{ filters.date }}">
     <select class="crm-input" name="status"><option value="">All Statuses</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
     <select class="crm-input" name="visit_type"><option value="">All Visit Types</option>{% for value, label in visit_type_choices %}<option value="{{ value }}" {% if filters.visit_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>

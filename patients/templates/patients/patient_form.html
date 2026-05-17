@@ -3,7 +3,14 @@
 {% block page_title %}Patients{% endblock %}
 {% block content %}
 <style>
-    .patient-profile-shell { display: grid; gap: 18px; max-width: 1180px; }
+    .patient-profile-top {
+        display: grid;
+        grid-template-columns: minmax(620px, 1fr) minmax(360px, 440px);
+        gap: 18px;
+        align-items: start;
+        margin-bottom: 18px;
+    }
+    .patient-profile-shell { display: grid; gap: 18px; }
     .patient-history-card {
         background: #ffffff;
         border: 1px solid #e9e4f0;
@@ -29,12 +36,7 @@
         font-size: 11px;
         margin-top: 3px;
     }
-    .history-grid {
-        display: grid;
-        grid-template-columns: minmax(280px, .9fr) minmax(420px, 1.1fr);
-        gap: 18px;
-        padding: 18px;
-    }
+    .history-grid { padding: 18px; }
     .activity-form {
         border: 1px solid #e9e4f0;
         border-radius: 8px;
@@ -117,7 +119,7 @@
     }
     .history-columns {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 16px;
     }
     .history-empty {
@@ -125,29 +127,118 @@
         font-size: 12px;
         padding: 10px 0;
     }
+    .timeline-item.is-hidden { display: none; }
+    .show-more-history {
+        margin-top: 10px;
+        border: 1px solid #ddd6fe;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #7c2d8e;
+        padding: 7px 10px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .show-more-history:hover { background: #f3e8ff; }
+    .recent-notes-card {
+        margin-top: 14px;
+        border: 1px solid #e9e4f0;
+        border-radius: 8px;
+        background: #ffffff;
+        overflow: hidden;
+    }
+    .recent-notes-head {
+        padding: 12px 14px;
+        border-bottom: 1px solid #e9e4f0;
+    }
+    .recent-notes-head h3 {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 600;
+        color: #1a1a2e;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+    }
+    .recent-note-list {
+        display: grid;
+        gap: 0;
+    }
+    .recent-note {
+        padding: 12px 14px;
+        border-bottom: 1px solid #f3f0f8;
+    }
+    .recent-note:last-child { border-bottom: 0; }
+    .recent-note-text {
+        color: #1a1a2e;
+        font-size: 12px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+    }
+    .recent-note-meta {
+        margin-top: 6px;
+        color: #9ca3af;
+        font-size: 10px;
+    }
     @media (max-width: 1000px) {
-        .history-grid, .history-columns { grid-template-columns: 1fr; }
+        .patient-profile-top, .history-columns { grid-template-columns: 1fr; }
     }
 </style>
 <div class="patient-profile-shell">
-<form class="card form-card" method="post">
-    {% csrf_token %}
-    <h2>{{ form_title }}</h2>
-    <div class="form-grid">
-        {% for field in form %}
-            <div class="field {% if field.name == 'insurance_notes' %}full{% endif %} {% if field.name == 'is_active' %}checkbox-field{% endif %}">
-                {% if field.name == 'is_active' %}
-                    {{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {% else %}
-                    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
-                {% endif %}
-                {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+    <div class="patient-profile-top">
+        <form class="card form-card" method="post">
+            {% csrf_token %}
+            <h2>{{ form_title }}</h2>
+            <div class="form-grid">
+                {% for field in form %}
+                    <div class="field {% if field.name == 'insurance_notes' %}full{% endif %} {% if field.name == 'is_active' %}checkbox-field{% endif %}">
+                        {% if field.name == 'is_active' %}
+                            {{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {% else %}
+                            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
+                        {% endif %}
+                        {% if field.name == 'insurance_notes' and patient %}
+                            <div class="help-text">When this note changes and you save, it will be added to the patient history.</div>
+                        {% endif %}
+                        {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+                <div class="form-actions"><a class="btn btn-outline-muted" href="/patients/">Cancel</a><button class="btn btn-primary" type="submit">Save Patient</button></div>
             </div>
-        {% endfor %}
-        <div class="form-actions"><a class="btn btn-outline-muted" href="/patients/">Cancel</a><button class="btn btn-primary" type="submit">Save Patient</button></div>
-    </div>
-</form>
+        </form>
 
+        {% if patient %}
+            <div>
+                <form class="activity-form" method="post">
+                    {% csrf_token %}
+                    <h3>Add patient note</h3>
+                    <input type="hidden" name="action" value="add_activity">
+                    <input type="hidden" name="activity_type" value="note">
+                    <div class="field">
+                        <label for="activity_notes">Notes</label>
+                        <textarea id="activity_notes" name="activity_notes" placeholder="Write what was discussed with this patient..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Save note</button>
+                </form>
+
+                <section class="recent-notes-card">
+                    <div class="recent-notes-head">
+                        <h3>Recent notes</h3>
+                    </div>
+                    <div class="recent-note-list">
+                        {% for activity in patient_notes %}
+                            <article class="recent-note">
+                                {% if activity.notes %}<div class="recent-note-text">{{ activity.notes }}</div>{% endif %}
+                                <div class="recent-note-meta">Added by: {{ activity.user_name|default:"System" }} &middot; {{ activity.created_at|date:"M j, Y" }} &middot; {{ activity.created_at|time:"g:i A" }}</div>
+                            </article>
+                        {% empty %}
+                            <div class="history-empty" style="padding:14px;">No notes recorded yet.</div>
+                        {% endfor %}
+                    </div>
+                </section>
+            </div>
+        {% endif %}
+    </div>
 {% if patient %}
     <section class="patient-history-card">
         <div class="history-header">
@@ -158,57 +249,38 @@
             <span class="badge badge-active">ID {{ patient.patient_code }}</span>
         </div>
         <div class="history-grid">
-            <form class="activity-form" method="post">
-                {% csrf_token %}
-                <h3>Add activity</h3>
-                <input type="hidden" name="action" value="add_activity">
-                <div class="field">
-                    <label for="activity_type">Type</label>
-                    <select id="activity_type" name="activity_type">
-                        {% for value, label in activity_type_choices %}
-                            <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="activity_title">Activity</label>
-                    <input id="activity_title" name="activity_title" type="text" placeholder="Example: Follow-up call completed">
-                </div>
-                <div class="field">
-                    <label for="activity_notes">Notes</label>
-                    <textarea id="activity_notes" name="activity_notes" placeholder="Add internal notes for this patient..."></textarea>
-                </div>
-                <button class="btn btn-primary" type="submit">Save activity</button>
-            </form>
-
             <div class="history-columns">
                 <div class="timeline-panel">
                     <h3>Activities</h3>
                     <div class="timeline-list">
                         {% for activity in patient_activities %}
-                            <div class="timeline-item">
+                            <div class="timeline-item {% if forloop.counter > 3 %}is-hidden{% endif %}">
                                 <span class="timeline-dot activity"></span>
                                 <div>
                                     <div class="timeline-title">{{ activity.title }}</div>
-                                    <div class="timeline-meta">{{ activity.get_activity_type_display }} · {{ activity.created_at|date:"M j, Y" }} · {{ activity.created_at|time:"g:i A" }} · {{ activity.user_name|default:"System" }}</div>
+                                    <div class="timeline-meta">{{ activity.get_activity_type_display }} &middot; {{ activity.created_at|date:"M j, Y" }} &middot; {{ activity.created_at|time:"g:i A" }}</div>
                                     {% if activity.notes %}<div class="timeline-notes">{{ activity.notes }}</div>{% endif %}
+                                    <div class="timeline-meta">Added by: {{ activity.user_name|default:"System" }}</div>
                                 </div>
                             </div>
                         {% empty %}
                             <div class="history-empty">No activities recorded yet.</div>
                         {% endfor %}
                     </div>
+                    {% if patient_activities|length > 3 %}
+                        <button class="show-more-history" type="button" data-show-more>Mostrar más</button>
+                    {% endif %}
                 </div>
 
                 <div class="timeline-panel">
                     <h3>Appointments</h3>
                     <div class="timeline-list">
                         {% for appointment in patient_appointments %}
-                            <div class="timeline-item">
+                            <div class="timeline-item {% if forloop.counter > 3 %}is-hidden{% endif %}">
                                 <span class="timeline-dot appointment"></span>
                                 <div>
                                     <div class="timeline-title">{{ appointment.date|date:"M j, Y" }} at {{ appointment.time|time:"g:i A" }}</div>
-                                    <div class="timeline-meta">{{ appointment.get_visit_type_display }} · {{ appointment.get_status_display }}</div>
+                                    <div class="timeline-meta">{{ appointment.get_visit_type_display }} &middot; {{ appointment.get_status_display }}</div>
                                     {% if appointment.notes %}<div class="timeline-notes">{{ appointment.notes|truncatechars:120 }}</div>{% endif %}
                                     <div class="timeline-meta"><a class="panel-link" style="display:inline-flex; padding:6px 0 0;" href="/appointments/{{ appointment.pk }}/edit/">Open appointment</a></div>
                                 </div>
@@ -217,14 +289,17 @@
                             <div class="history-empty">No appointments recorded yet.</div>
                         {% endfor %}
                     </div>
+                    {% if patient_appointments|length > 3 %}
+                        <button class="show-more-history" type="button" data-show-more>Mostrar más</button>
+                    {% endif %}
 
                     <h3 style="margin-top:18px;">Payments</h3>
                     <div class="timeline-list">
                         {% for payment in patient_payments %}
-                            <div class="timeline-item">
+                            <div class="timeline-item {% if forloop.counter > 3 %}is-hidden{% endif %}">
                                 <span class="timeline-dot payment"></span>
                                 <div>
-                                    <div class="timeline-title">${{ payment.amount }} · {{ payment.get_payment_method_display }}</div>
+                                    <div class="timeline-title">${{ payment.amount }} &middot; {{ payment.get_payment_method_display }}</div>
                                     <div class="timeline-meta">{{ payment.date|date:"M j, Y" }}</div>
                                     {% if payment.notes %}<div class="timeline-notes">{{ payment.notes|truncatechars:120 }}</div>{% endif %}
                                 </div>
@@ -233,10 +308,24 @@
                             <div class="history-empty">No payments recorded yet.</div>
                         {% endfor %}
                     </div>
+                    {% if patient_payments|length > 3 %}
+                        <button class="show-more-history" type="button" data-show-more>Mostrar más</button>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </section>
 {% endif %}
 </div>
+<script>
+    document.querySelectorAll('[data-show-more]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var panel = button.closest('.timeline-panel');
+            panel.querySelectorAll('.timeline-item.is-hidden').forEach(function (item) {
+                item.classList.remove('is-hidden');
+            });
+            button.remove();
+        });
+    });
+</script>
 {% endblock %}

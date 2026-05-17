@@ -2,58 +2,121 @@
 {% block title %}Booking Requests | Oak & Vine CRM{% endblock %}
 {% block page_title %}Booking Requests / Solicitudes de Cita{% endblock %}
 {% block content %}
+<style>
+    .cal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .cal-title { margin: 0; font-size: 16px; font-weight: 500; color: #1a1a2e; }
+    .cal-subtitle { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .cal-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    .view-tabs { display: flex; gap: 4px; background: #f3f0f8; border-radius: 8px; padding: 3px; }
+    .view-tab { display: inline-flex; align-items: center; padding: 5px 14px; border-radius: 6px; font-size: 11px; font-weight: 500; color: #6b7280; border: none; background: transparent; transition: all .15s; }
+    .view-tab.active { background: #7c2d8e; color: #fff; }
+    .cal-grid { border: 1px solid #e9e4f0; border-radius: 10px; overflow: hidden; background: #fff; }
+    .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); background: #f8f6f0; border-bottom: 1px solid #e9e4f0; }
+    .cal-weekday { padding: 8px 0; text-align: center; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: #9ca3af; }
+    .cal-week { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #f0ebf8; }
+    .cal-week:last-child { border-bottom: none; }
+    .cal-day { min-height: 90px; padding: 6px 8px; border-right: 1px solid #f0ebf8; background: #fff; min-width: 0; }
+    .cal-day:last-child { border-right: none; }
+    .cal-day--other-month { background: #faf8fc; border-right-color: #ede8f5; }
+    .cal-day--other-month .cal-day-num { color: #c4b5d4; }
+    .cal-day--today { background: #fdf8ff; }
+    .cal-day--today .cal-day-num { background: #7c2d8e; color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+    .cal-day-num { font-size: 11px; font-weight: 500; color: #4b5563; margin-bottom: 4px; line-height: 1; }
+    .cal-month-tag { font-size: 9px; color: #c4b5d4; margin-left: 2px; }
+    .cal-event { display: block; background: #f3e8ff; border-left: 2px solid #7c2d8e; border-radius: 0 4px 4px 0; padding: 3px 6px; margin-bottom: 3px; text-decoration: none; transition: background .1s; }
+    .cal-event:hover { background: #ede0fb; }
+    .cal-event.pending-request { background: #fff7ed; border-left-color: #f59e0b; }
+    .cal-event-time { font-size: 9px; font-weight: 600; color: #7c2d8e; display: block; line-height: 1.3; }
+    .pending-request .cal-event-time { color: #92400e; }
+    .cal-event-name { font-size: 10px; color: #1a1a2e; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; line-height: 1.3; }
+    .cal-event-type { font-size: 9px; color: #9ca3af; display: block; line-height: 1.3; }
+    .status-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+    .status-dot--confirmed { background: #7c2d8e; }
+    .status-dot--pending { background: #f59e0b; }
+    .status-dot--cancelled { background: #ef4444; }
+    .status-dot--completed { background: #3b82f6; }
+    .cal-week--past .cal-day { background: #faf9fb; }
+    .cal-week--past .cal-day--other-month { background: #f7f5f9; }
+    .cal-legend { display: flex; gap: 16px; margin-top: 12px; font-size: 10px; color: #9ca3af; align-items: center; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .legend-box { width: 10px; height: 10px; border-radius: 2px; }
+    @media (max-width: 900px) {
+        .cal-header { align-items: flex-start; flex-direction: column; }
+        .cal-actions { justify-content: flex-start; }
+        .cal-grid { overflow-x: auto; }
+        .cal-weekdays, .cal-week { min-width: 760px; }
+    }
+</style>
+
 {% if pending_count > 0 %}
     <div class="alert alert-warning">You have {{ pending_count }} pending booking requests</div>
 {% endif %}
 
-<div class="view-switch">
-    <nav class="tabs">
-        <a class="page-link {% if view_mode == 'list' %}active{% endif %}" href="/bookings/?view=list">List View</a>
-        <a class="page-link {% if view_mode == 'day' %}active{% endif %}" href="/bookings/?view=day">Day</a>
-        <a class="page-link {% if view_mode == 'week' %}active{% endif %}" href="/bookings/?view=week">Week</a>
-        <a class="page-link {% if view_mode == 'month' %}active{% endif %}" href="/bookings/?view=month">Month</a>
-    </nav>
-    {% if view_mode != 'list' %}
-        <div class="week-nav">
-            <a class="btn btn-outline-muted" href="/bookings/?view={{ view_mode }}&date={{ previous_period|date:'Y-m-d' }}">Previous</a>
-            <span class="week-title">{{ period_label }}</span>
-            <a class="btn btn-outline-muted" href="/bookings/?view={{ view_mode }}&date={{ next_period|date:'Y-m-d' }}">Next</a>
-        </div>
-    {% endif %}
-</div>
-
 {% if view_mode != 'list' %}
-    <section class="{{ calendar_class }}">
-        {% for day in calendar_days %}
-            <div class="card calendar-day {% if view_mode == 'month' and not day.is_current_month %}calendar-muted{% endif %}">
-                <div class="calendar-date">
-                    <strong>{% if view_mode == 'month' %}{{ day.date|date:"j" }}{% else %}{{ day.date|date:"D" }}{% endif %}</strong>
-                    <span>{% if view_mode == 'month' %}{{ day.date|date:"D" }}{% else %}{{ day.date|date:"M j" }}{% endif %}</span>
-                </div>
-                <div class="calendar-items">
-                    {% for appointment in day.appointments %}
-                        <div class="calendar-event">
-                            <div class="calendar-time">{{ appointment.time|time:"g:i A" }}</div>
-                            <div class="calendar-patient">{{ appointment.patient.patient_code }} - {{ appointment.patient.first_name }} {{ appointment.patient.last_name }}</div>
-                            <div class="calendar-meta">{{ appointment.get_visit_type_display }} · {{ appointment.get_status_display }}</div>
-                            <div class="calendar-action"><a class="btn btn-outline-muted" href="/appointments/{{ appointment.pk }}/edit/">Modify</a></div>
+    <div class="cal-header">
+        <div>
+            <h1 class="cal-title">Booking Requests</h1>
+            <p class="cal-subtitle">{{ period_label }} &nbsp;&middot;&nbsp; {% if view_mode == 'month' %}4-week view{% else %}{{ view_mode|title }} view{% endif %}</p>
+        </div>
+        <div class="cal-actions">
+            <div class="view-tabs">
+                <a class="view-tab" href="/bookings/?view=list">List</a>
+                <a class="view-tab {% if view_mode == 'day' %}active{% endif %}" href="/bookings/?view=day">Day</a>
+                <a class="view-tab {% if view_mode == 'week' %}active{% endif %}" href="/bookings/?view=week">Week</a>
+                <a class="view-tab {% if view_mode == 'month' %}active{% endif %}" href="/bookings/?view=month">Month</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="cal-grid">
+        <div class="cal-weekdays">
+            <div class="cal-weekday">Mon</div>
+            <div class="cal-weekday">Tue</div>
+            <div class="cal-weekday">Wed</div>
+            <div class="cal-weekday">Thu</div>
+            <div class="cal-weekday">Fri</div>
+            <div class="cal-weekday">Sat</div>
+            <div class="cal-weekday">Sun</div>
+        </div>
+
+        {% for week in calendar_weeks %}
+            <div class="cal-week {% if forloop.first and view_mode == 'month' %}cal-week--past{% endif %}">
+                {% for day in week %}
+                    <div class="cal-day {% if view_mode == 'month' and not day.is_current_month %}cal-day--other-month{% endif %} {% if day.date == selected_day %}cal-day--today{% endif %}">
+                        <div class="cal-day-num">
+                            {{ day.date|date:"j" }}
+                            {% if view_mode == 'month' and not day.is_current_month %}
+                                <span class="cal-month-tag">{{ day.date|date:"M" }}</span>
+                            {% endif %}
                         </div>
-                    {% endfor %}
-                    {% for booking in day.bookings %}
-                        <div class="calendar-event pending-request">
-                            <div class="calendar-time">{{ booking.requested_time }}</div>
-                            <div class="calendar-patient">{% if booking.matched_patient %}{{ booking.matched_patient.patient_code }} - {% endif %}{{ booking.first_name }} {{ booking.last_name }}</div>
-                            <div class="calendar-meta">Pending booking · {{ booking.visit_type }}</div>
-                            <div class="calendar-action"><a class="btn btn-outline-primary" href="/bookings/{{ booking.pk }}/review/">Agregar al calendario</a></div>
-                        </div>
-                    {% endfor %}
-                    {% if not day.appointments and not day.bookings and view_mode != 'month' %}
-                        <div class="empty">No appointments</div>
-                    {% endif %}
-                </div>
+
+                        {% for appointment in day.appointments %}
+                            <a href="/appointments/{{ appointment.pk }}/edit/" class="cal-event">
+                                <span class="cal-event-time"><span class="status-dot status-dot--{{ appointment.status }}"></span>{{ appointment.time|time:"g:i A" }}</span>
+                                <span class="cal-event-name">{{ appointment.patient.patient_code }} &middot; {{ appointment.patient.first_name }} {{ appointment.patient.last_name }}</span>
+                                <span class="cal-event-type">{{ appointment.get_visit_type_display }} &middot; {{ appointment.get_status_display }}</span>
+                            </a>
+                        {% endfor %}
+
+                        {% for booking in day.bookings %}
+                            <a href="/bookings/{{ booking.pk }}/review/" class="cal-event pending-request">
+                                <span class="cal-event-time"><span class="status-dot status-dot--pending"></span>{{ booking.requested_time }}</span>
+                                <span class="cal-event-name">{% if booking.matched_patient %}{{ booking.matched_patient.patient_code }} &middot; {% endif %}{{ booking.first_name }} {{ booking.last_name }}</span>
+                                <span class="cal-event-type">Pending booking &middot; {{ booking.visit_type }}</span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
             </div>
         {% endfor %}
-    </section>
+    </div>
+
+    <div class="cal-legend">
+        <div class="legend-item"><div class="legend-box" style="background:#faf8fc; border:1px solid #ede8f5;"></div> Days from another month</div>
+        <div class="legend-item"><div class="legend-box" style="background:#fdf8ff; border:1px solid #ddd6fe;"></div> Selected day</div>
+        <div class="legend-item"><span class="status-dot status-dot--confirmed"></span> Appointment</div>
+        <div class="legend-item"><span class="status-dot status-dot--pending"></span> Pending booking</div>
+    </div>
 {% else %}
     <nav class="tabs">
         <a class="page-link {% if not status_filter %}active{% endif %}" href="/bookings/?view=list{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">All</a>
@@ -63,7 +126,7 @@
         <a class="page-link {% if status_filter == 'converted' %}active{% endif %}" href="/bookings/?view=list&status=converted{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Converted</a>
     </nav>
 
-    <form class="card filter-card compact" method="get">
+    <form class="card filter-card compact auto-filter-form" method="get">
         <input type="hidden" name="view" value="list">
         {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
         <input class="crm-input" type="search" name="q" value="{{ search_query }}" placeholder="Buscar por ID, paciente, telefono o email">

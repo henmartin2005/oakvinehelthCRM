@@ -237,23 +237,14 @@ def build_booking_calendar(view_mode, selected_day):
         period_label = selected_day.strftime('%B %d, %Y')
         calendar_class = 'calendar-grid calendar-day-grid'
     elif view_mode == 'month':
-        month_calendar = calendar.Calendar(firstweekday=0).monthdatescalendar(
-            selected_day.year,
-            selected_day.month,
-        )
-        days = [day for week in month_calendar for day in week]
-        period_start = days[0]
+        current_monday = start_of_week(selected_day)
+        period_start = current_monday - timedelta(weeks=1)
+        days = [period_start + timedelta(days=offset) for offset in range(28)]
         period_end = days[-1]
-        if selected_day.month == 1:
-            previous_period = selected_day.replace(year=selected_day.year - 1, month=12, day=1)
-        else:
-            previous_period = selected_day.replace(month=selected_day.month - 1, day=1)
-        if selected_day.month == 12:
-            next_period = selected_day.replace(year=selected_day.year + 1, month=1, day=1)
-        else:
-            next_period = selected_day.replace(month=selected_day.month + 1, day=1)
-        period_label = selected_day.strftime('%B %Y')
-        calendar_class = 'calendar-grid calendar-month-grid'
+        previous_period = period_start - timedelta(weeks=4)
+        next_period = period_start + timedelta(weeks=4)
+        period_label = f'{period_start.strftime("%b %d")} - {period_end.strftime("%b %d, %Y")}'
+        calendar_class = 'cal-grid'
     else:
         period_start = start_of_week(selected_day)
         days = [period_start + timedelta(days=offset) for offset in range(7)]
@@ -282,9 +273,11 @@ def build_booking_calendar(view_mode, selected_day):
                 'bookings': [booking for booking in pending_bookings if booking.requested_date == day],
             }
         )
+    calendar_weeks = [calendar_days[index:index + 7] for index in range(0, len(calendar_days), 7)]
 
     return {
         'calendar_days': calendar_days,
+        'calendar_weeks': calendar_weeks,
         'period_start': period_start,
         'period_end': period_end,
         'previous_period': previous_period,
@@ -437,13 +430,11 @@ def api_available_slots(request):
 @login_required
 def dashboard_view(request):
     today = timezone.localdate()
-    month_payments = Payment.objects.filter(date__year=today.year, date__month=today.month)
     today_appointments = Appointment.objects.select_related('patient').filter(date=today).order_by('time')
     context = {
         'total_patients': Patient.objects.count(),
         'today_appointments_count': today_appointments.count(),
         'pending_appointments_count': Appointment.objects.filter(status=Appointment.STATUS_PENDING).count(),
-        'month_payments_total': money_sum(month_payments),
         'recent_patients': Patient.objects.order_by('-created_at')[:5],
         'today_appointments': today_appointments,
     }
@@ -594,7 +585,6 @@ def patient_list_view(request):
     patients = Patient.objects.order_by('last_name', 'first_name')
     q = request.GET.get('q', '').strip()
     status = request.GET.get('status', '')
-    payment_type = request.GET.get('payment_type', '')
     language = request.GET.get('language', '')
 
     if q:
@@ -610,8 +600,6 @@ def patient_list_view(request):
         patients = patients.filter(is_active=True)
     elif status == 'inactive':
         patients = patients.filter(is_active=False)
-    if payment_type:
-        patients = patients.filter(payment_type=payment_type)
     if language:
         patients = patients.filter(language=language)
     patients = patients.distinct()
@@ -620,7 +608,7 @@ def patient_list_view(request):
     return render(
         request,
         'patients/patient_list.html',
-        {'page_obj': page_obj, 'filters': {'q': q, 'status': status, 'payment_type': payment_type, 'language': language}},
+        {'page_obj': page_obj, 'filters': {'q': q, 'status': status, 'language': language}},
     )
 
 
@@ -630,6 +618,7 @@ def patient_create_view(request):
         messages.error(request, 'Assistant users cannot create or modify patient records.')
         return redirect('patient_list')
     form = PatientForm(request.POST or None)
+    form.fields.pop('payment_type', None)
     if request.method == 'POST' and form.is_valid():
         patient = form.save()
         PatientActivity.objects.create(
@@ -650,43 +639,58 @@ def patient_update_view(request, pk):
         return redirect('patient_list')
     patient = get_object_or_404(Patient, pk=pk)
     form = PatientForm(request.POST or None, instance=patient)
+    form.fields.pop('payment_type', None)
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'add_activity':
-            title = request.POST.get('activity_title', '').strip()
             notes = request.POST.get('activity_notes', '').strip()
             activity_type = request.POST.get('activity_type', PatientActivity.TYPE_NOTE)
             valid_types = {choice[0] for choice in PatientActivity.ACTIVITY_TYPE_CHOICES}
-            if not title:
-                messages.error(request, 'Activity title is required.')
+            if not notes:
+                messages.error(request, 'Note is required.')
             else:
                 PatientActivity.objects.create(
                     patient=patient,
                     activity_type=activity_type if activity_type in valid_types else PatientActivity.TYPE_NOTE,
-                    title=title,
+                    title='Patient note',
                     notes=notes,
                     user_id=str(request.user.pk),
                     user_name=booking_user_name(request.user),
                 )
-                messages.success(request, 'Patient activity saved.')
+                messages.success(request, 'Patient note saved.')
                 return redirect('patient_update', pk=patient.pk)
         elif form.is_valid():
             changed_fields = list(form.changed_data)
+            profile_note = form.cleaned_data.get('insurance_notes', '').strip()
             form.save()
+            if 'insurance_notes' in changed_fields and profile_note:
+                PatientActivity.objects.create(
+                    patient=patient,
+                    activity_type=PatientActivity.TYPE_NOTE,
+                    title='Patient profile note added',
+                    notes=profile_note,
+                    user_id=str(request.user.pk),
+                    user_name=booking_user_name(request.user),
+                )
             if changed_fields:
+                profile_fields = [field for field in changed_fields if field != 'insurance_notes']
                 PatientActivity.objects.create(
                     patient=patient,
                     activity_type=PatientActivity.TYPE_ADMIN,
                     title='Patient profile updated',
-                    notes=', '.join(changed_fields),
+                    notes=', '.join(profile_fields) if profile_fields else 'Profile notes updated',
                     user_id=str(request.user.pk),
                     user_name=booking_user_name(request.user),
                 )
-            return redirect('patient_list')
+                messages.success(request, 'Patient profile saved.')
+            else:
+                messages.success(request, 'No patient changes to save.')
+            return redirect('patient_update', pk=patient.pk)
 
     patient_appointments = Appointment.objects.filter(patient=patient).order_by('-date', '-time')[:20]
     patient_payments = Payment.objects.filter(patient=patient).order_by('-date', '-id')[:10]
     patient_activities = PatientActivity.objects.filter(patient=patient).order_by('-created_at')[:20]
+    patient_notes = PatientActivity.objects.filter(patient=patient, activity_type=PatientActivity.TYPE_NOTE).order_by('-created_at')[:8]
     return render(
         request,
         'patients/patient_form.html',
@@ -697,6 +701,7 @@ def patient_update_view(request, pk):
             'patient_appointments': patient_appointments,
             'patient_payments': patient_payments,
             'patient_activities': patient_activities,
+            'patient_notes': patient_notes,
             'activity_type_choices': PatientActivity.ACTIVITY_TYPE_CHOICES,
         },
     )

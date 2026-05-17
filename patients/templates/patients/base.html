@@ -189,6 +189,31 @@
             .userbar { flex-wrap: wrap; }
         }
     </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.auto-filter-form').forEach(function (form) {
+                var timer = null;
+                var doSubmit = function (delay) {
+                    window.clearTimeout(timer);
+                    timer = window.setTimeout(function () {
+                        if (form.requestSubmit) {
+                            form.requestSubmit();
+                        } else {
+                            form.submit();
+                        }
+                    }, delay);
+                };
+
+                form.querySelectorAll('input[type="search"], input[type="text"]').forEach(function (input) {
+                    input.addEventListener('input', function () { doSubmit(350); });
+                });
+
+                form.querySelectorAll('input[type="date"], select').forEach(function (field) {
+                    field.addEventListener('change', function () { doSubmit(0); });
+                });
+            });
+        });
+    </script>
 </head>
 <body>
 <div class="layout">
