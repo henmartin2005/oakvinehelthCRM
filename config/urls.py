@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/book-appointment/', views.api_book_appointment, name='api_book_appointment'),
     path('api/available-slots/', views.api_available_slots, name='api_available_slots'),
     path('api/appointment-day-schedule/', views.api_appointment_day_schedule, name='api_appointment_day_schedule'),
+    path('api/n8n/appointments/', views.n8n_pending_appointments, name='n8n_appointments'),
     path('', views.dashboard_view, name='dashboard'),
     path('profile/', views.admin_profile_view, name='admin_profile'),
     path('users/<int:pk>/edit/', views.user_update_view, name='user_update'),

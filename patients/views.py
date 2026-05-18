@@ -15,6 +15,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt
 
 from .forms import (
     AppointmentForm,
@@ -1217,3 +1218,46 @@ def booking_config_view(request):
             'slots_url': request.build_absolute_uri('/api/available-slots/?date=YYYY-MM-DD'),
         },
     )
+
+
+# --- n8n polling endpoint ---
+@csrf_exempt
+def n8n_pending_appointments(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'method not allowed'}, status=405)
+
+    token = request.GET.get('token', '')
+    if token != 'OAK_N8N_2026':
+        return JsonResponse({'error': 'unauthorized'}, status=401)
+
+    since = timezone.now() - timedelta(hours=48)
+    appointments = (
+        Appointment.objects.filter(created_at__gte=since, notification_sent=False)
+        .select_related('patient')
+        .order_by('created_at')
+    )
+
+    data = []
+    for appointment in appointments:
+        patient = appointment.patient
+        patient_name = f'{patient.first_name} {patient.last_name}'.strip() if patient else 'Unknown'
+        data.append(
+            {
+                'id': appointment.id,
+                'patient_name': patient_name or 'Unknown',
+                'patient_email': patient.email if patient else '',
+                'patient_phone': patient.phone if patient else '',
+                'appointment_date': appointment.date.strftime('%Y-%m-%d') if appointment.date else '',
+                'appointment_time': appointment.time.strftime('%I:%M %p') if appointment.time else '',
+                'visit_type': appointment.get_visit_type_display() if appointment.visit_type else '',
+                'status': appointment.status or '',
+                'created_at': timezone.localtime(appointment.created_at).strftime('%Y-%m-%d %H:%M:%S')
+                if appointment.created_at
+                else '',
+            }
+        )
+
+    if data:
+        Appointment.objects.filter(id__in=[item['id'] for item in data]).update(notification_sent=True)
+
+    return JsonResponse({'count': len(data), 'appointments': data})
