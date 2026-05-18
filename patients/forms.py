@@ -127,7 +127,14 @@ class PatientForm(CRMModelForm):
         self.fields['date_of_birth'].input_formats = ['%Y-%m-%d']
 
 
+class PatientAppointmentChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, patient):
+        return f'{patient.patient_code} - {patient.first_name} {patient.last_name} - {patient.phone}'
+
+
 class AppointmentForm(CRMModelForm):
+    patient = PatientAppointmentChoiceField(queryset=Patient.objects.none())
+
     class Meta:
         model = Appointment
         fields = ['patient', 'date', 'time', 'visit_type', 'status', 'notes']

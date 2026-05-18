@@ -203,7 +203,13 @@
                         {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
                     </div>
                 {% endfor %}
-                <div class="form-actions"><a class="btn btn-outline-muted" href="/patients/">Cancel</a><button class="btn btn-primary" type="submit">Save Patient</button></div>
+            <div class="form-actions">
+                {% if patient %}
+                    <a class="btn btn-outline-primary" href="/appointments/new/?patient={{ patient.pk }}">Agregar appointment</a>
+                {% endif %}
+                <a class="btn btn-outline-muted" href="/patients/">Cancel</a>
+                <button class="btn btn-primary" type="submit">Save Patient</button>
+            </div>
             </div>
         </form>
 

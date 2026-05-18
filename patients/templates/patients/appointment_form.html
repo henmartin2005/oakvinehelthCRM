@@ -2,23 +2,353 @@
 {% block title %}{{ form_title }} | Oak & Vine CRM{% endblock %}
 {% block page_title %}Appointments{% endblock %}
 {% block content %}
-<form class="card form-card" method="post">
-    {% csrf_token %}
-    <h2>{{ form_title }}</h2>
-    <div class="form-grid">
-        {% for field in form %}
-            <div class="field {% if field.name == 'notes' %}full{% endif %}">
-                <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>{{ field }}
-                {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+<style>
+    .patient-search-helper {
+        margin-bottom: 8px;
+        border: 1px solid #ddd6fe;
+        border-radius: 6px;
+        padding: 8px 10px;
+        width: 100%;
+        font: inherit;
+        font-size: 12px;
+        color: #1a1a2e;
+        background: #ffffff;
+    }
+    .patient-search-helper:focus {
+        outline: 0;
+        border-color: #9333ea;
+        box-shadow: 0 0 0 3px rgba(147, 51, 234, .12);
+    }
+    .patient-search-help {
+        margin-top: 6px;
+        color: #9ca3af;
+        font-size: 11px;
+    }
+    .appointment-editor {
+        display: grid;
+        grid-template-columns: minmax(620px, 1fr) minmax(340px, 420px);
+        gap: 18px;
+        align-items: start;
+    }
+    .day-schedule-card {
+        background: #ffffff;
+        border: 1px solid #e9e4f0;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .day-schedule-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid #e9e4f0;
+    }
+    .day-schedule-head h2 {
+        margin: 0;
+        color: #1a1a2e;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+    }
+    .day-schedule-subtitle {
+        margin-top: 4px;
+        color: #9ca3af;
+        font-size: 11px;
+    }
+    .day-schedule-list {
+        display: grid;
+        gap: 8px;
+        max-height: 520px;
+        overflow-y: auto;
+        padding: 12px;
+    }
+    .slot-button {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 10px;
+        align-items: start;
+        border: 1px solid #e9e4f0;
+        border-left: 3px solid #7c2d8e;
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 9px 10px;
+        color: #1a1a2e;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+    }
+    .slot-button:hover { background: #f3e8ff; }
+    .slot-button.is-selected { border-color: #9333ea; background: #f3e8ff; box-shadow: 0 0 0 3px rgba(147, 51, 234, .12); }
+    .slot-button.is-booked {
+        border-left-color: #f59e0b;
+        background: #fbfaf7;
+        cursor: not-allowed;
+        opacity: .9;
+    }
+    .slot-time { color: #7c2d8e; font-size: 12px; font-weight: 800; }
+    .slot-button.is-booked .slot-time { color: #92400e; }
+    .slot-status { color: #9ca3af; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+    .slot-detail { color: #1a1a2e; font-size: 12px; font-weight: 600; }
+    .slot-meta { margin-top: 2px; color: #9ca3af; font-size: 11px; }
+    .schedule-empty { padding: 16px; color: #9ca3af; font-size: 12px; }
+    .btn.btn-email-notify,
+    button.btn.btn-email-notify {
+        background: #16a34a;
+        border-color: #16a34a;
+        color: #ffffff;
+    }
+    .btn.btn-email-notify:hover,
+    button.btn.btn-email-notify:hover {
+        background: #15803d;
+        border-color: #15803d;
+        color: #ffffff;
+    }
+    .btn.btn-email-notify:disabled,
+    button.btn.btn-email-notify:disabled {
+        background: #16a34a;
+        border-color: #16a34a;
+        color: #ffffff;
+        opacity: .72;
+        cursor: not-allowed;
+    }
+    .notify-modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        padding: 20px;
+        background: rgba(26, 26, 46, .48);
+        z-index: 50;
+    }
+    .notify-modal.open { display: grid; }
+    .notify-dialog {
+        width: min(100%, 460px);
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 18px 45px rgba(26,26,46,.18);
+        padding: 20px;
+    }
+    .notify-dialog h3 { margin: 0 0 8px; font-size: 16px; color: #1a1a2e; }
+    .notify-dialog p { margin: 0 0 14px; color: #6b7280; font-size: 13px; line-height: 1.45; }
+    .notify-dialog label { display: block; margin-bottom: 6px; color: #6b7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .notify-dialog input { width: 100%; border: 1px solid #ddd6fe; border-radius: 6px; padding: 9px 11px; font: inherit; font-size: 13px; }
+    .notify-status { min-height: 18px; margin-top: 10px; font-size: 12px; font-weight: 700; }
+    .notify-status.error { color: #dc2626; }
+    .notify-status.success { color: #15803d; }
+    .notify-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+    @media (max-width: 1000px) {
+        .appointment-editor { grid-template-columns: 1fr; }
+    }
+</style>
+<div class="appointment-editor">
+    <form class="card form-card" method="post">
+        {% csrf_token %}
+        <h2>{{ form_title }}</h2>
+        <div class="form-grid">
+            {% for field in form %}
+                <div class="field {% if field.name == 'notes' %}full{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}*{% endif %}</label>
+                    {% if field.name == 'patient' %}
+                        <input class="patient-search-helper" type="search" id="patientSearch" placeholder="Search patient by name, ID or phone">
+                    {% endif %}
+                    {{ field }}
+                    {% if field.name == 'patient' %}
+                        <div class="patient-search-help">Type to filter patients. The selected patient will stay loaded for this appointment.</div>
+                    {% elif field.name == 'time' %}
+                        <div class="patient-search-help">Select an available time from the schedule on the right.</div>
+                    {% endif %}
+                    {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                </div>
+            {% endfor %}
+            <div class="form-actions">
+                {% if appointment and appointment.patient_id %}
+                    <a class="btn btn-outline-primary" href="/patients/{{ appointment.patient_id }}/edit/">Ir al perfil del paciente</a>
+                    <button class="btn btn-email-notify" type="button" id="openNotifyModal">✉ Notificar por email</button>
+                {% endif %}
+                <a class="btn btn-outline-muted" href="/appointments/">Cancel</a>
+                <button class="btn btn-primary" type="submit">Save Appointment</button>
             </div>
-        {% endfor %}
-        <div class="form-actions">
-            {% if appointment and appointment.patient_id %}
-                <a class="btn btn-outline-primary" href="/patients/{{ appointment.patient_id }}/edit/">Ir al perfil del paciente</a>
-            {% endif %}
-            <a class="btn btn-outline-muted" href="/appointments/">Cancel</a>
-            <button class="btn btn-primary" type="submit">Save Appointment</button>
+        </div>
+    </form>
+
+    <aside class="day-schedule-card">
+        <div class="day-schedule-head">
+            <h2>Day schedule</h2>
+            <div class="day-schedule-subtitle" id="scheduleSubtitle">Select a date to view available hours.</div>
+        </div>
+        <div class="day-schedule-list" id="dayScheduleList">
+            <div class="schedule-empty">Choose a date to load the clinic schedule.</div>
+        </div>
+    </aside>
+</div>
+{% if appointment and appointment.patient_id %}
+    <div class="notify-modal" id="notifyModal" role="dialog" aria-modal="true" aria-labelledby="notifyTitle">
+        <div class="notify-dialog">
+            <h3 id="notifyTitle">Notificar cita por email</h3>
+            <p>Se enviará la confirmación de la cita a través de n8n con los datos del paciente y appointment.</p>
+            <label for="notifyEmail">Patient email</label>
+            <input id="notifyEmail" type="email" value="{{ appointment.patient.email|default:'' }}" placeholder="patient@email.com">
+            <div class="notify-status" id="notifyStatus"></div>
+            <div class="notify-actions">
+                <button class="btn btn-outline-muted" type="button" id="closeNotifyModal">Cancel</button>
+                <button class="btn btn-email-notify" type="button" id="sendNotifyEmail">✉ Send confirmation</button>
+            </div>
         </div>
     </div>
-</form>
+{% endif %}
+<script>
+    (function () {
+        var search = document.getElementById('patientSearch');
+        var select = document.getElementById('id_patient');
+        if (!search || !select) { return; }
+
+        Array.prototype.forEach.call(select.options, function (option) {
+            option.dataset.searchText = option.textContent.toLowerCase();
+        });
+
+        search.addEventListener('input', function () {
+            var query = search.value.trim().toLowerCase();
+            Array.prototype.forEach.call(select.options, function (option) {
+                if (!option.value) { return; }
+                option.hidden = query && option.dataset.searchText.indexOf(query) === -1;
+            });
+        });
+    })();
+
+    (function () {
+        var dateInput = document.getElementById('id_date');
+        var timeInput = document.getElementById('id_time');
+        var scheduleList = document.getElementById('dayScheduleList');
+        var scheduleSubtitle = document.getElementById('scheduleSubtitle');
+        var appointmentId = {% if appointment %}{{ appointment.pk }}{% else %}null{% endif %};
+        if (!dateInput || !timeInput || !scheduleList) { return; }
+
+        function setEmpty(message) {
+            scheduleList.innerHTML = '<div class="schedule-empty">' + message + '</div>';
+        }
+
+        function normalizeTime(value) {
+            if (!value) { return ''; }
+            var parts = value.split(':');
+            if (parts.length < 2) { return value; }
+            return String(parseInt(parts[0], 10)) + ':' + parts[1].slice(0, 2);
+        }
+
+        function loadSchedule() {
+            var dateValue = dateInput.value;
+            if (!dateValue) {
+                scheduleSubtitle.textContent = 'Select a date to view available hours.';
+                setEmpty('Choose a date to load the clinic schedule.');
+                return;
+            }
+
+            scheduleSubtitle.textContent = 'Loading schedule for ' + dateValue + '...';
+            setEmpty('Loading schedule...');
+            var url = '/api/appointment-day-schedule/?date=' + encodeURIComponent(dateValue);
+            if (appointmentId) { url += '&exclude=' + encodeURIComponent(appointmentId); }
+
+            fetch(url)
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (data.error) {
+                        scheduleSubtitle.textContent = data.error;
+                        setEmpty(data.error);
+                        return;
+                    }
+                    scheduleSubtitle.textContent = data.day + ' - select an available time.';
+                    if (!data.slots || !data.slots.length) {
+                        setEmpty('No clinic hours configured for this day.');
+                        return;
+                    }
+
+                    var selectedTime = normalizeTime(timeInput.value);
+                    scheduleList.innerHTML = '';
+                    data.slots.forEach(function (slot) {
+                        var button = document.createElement(slot.available ? 'button' : 'div');
+                        button.className = 'slot-button' + (slot.available ? '' : ' is-booked') + (selectedTime === slot.time ? ' is-selected' : '');
+                        if (slot.available) {
+                            button.type = 'button';
+                            button.addEventListener('click', function () {
+                                timeInput.value = slot.time.padStart(5, '0');
+                                scheduleList.querySelectorAll('.slot-button').forEach(function (item) {
+                                    item.classList.remove('is-selected');
+                                });
+                                button.classList.add('is-selected');
+                            });
+                        }
+
+                        var detail = slot.available
+                            ? '<div class="slot-detail">Available</div><div class="slot-meta">Click to select this time</div>'
+                            : '<div class="slot-detail">' + slot.appointment.patient_code + ' - ' + slot.appointment.patient_name + '</div><div class="slot-meta">' + slot.appointment.visit_type + ' - ' + slot.appointment.status + '</div>';
+                        button.innerHTML = '<div><div class="slot-time">' + slot.display_time + '</div><div class="slot-status">' + (slot.available ? 'Open' : 'Booked') + '</div></div><div>' + detail + '</div>';
+                        scheduleList.appendChild(button);
+                    });
+                })
+                .catch(function () {
+                    scheduleSubtitle.textContent = 'Could not load schedule.';
+                    setEmpty('Could not load schedule.');
+                });
+        }
+
+        dateInput.addEventListener('change', loadSchedule);
+        timeInput.addEventListener('change', loadSchedule);
+        loadSchedule();
+    })();
+
+    (function () {
+        var modal = document.getElementById('notifyModal');
+        var openButton = document.getElementById('openNotifyModal');
+        var closeButton = document.getElementById('closeNotifyModal');
+        var sendButton = document.getElementById('sendNotifyEmail');
+        var emailInput = document.getElementById('notifyEmail');
+        var status = document.getElementById('notifyStatus');
+        var csrf = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (!modal || !openButton || !sendButton || !emailInput || !csrf) { return; }
+
+        function setStatus(message, type) {
+            status.textContent = message || '';
+            status.className = 'notify-status ' + (type || '');
+        }
+
+        openButton.addEventListener('click', function () {
+            setStatus('', '');
+            modal.classList.add('open');
+            emailInput.focus();
+        });
+        closeButton.addEventListener('click', function () { modal.classList.remove('open'); });
+        modal.addEventListener('click', function (event) {
+            if (event.target === modal) { modal.classList.remove('open'); }
+        });
+        sendButton.addEventListener('click', function () {
+            var email = emailInput.value.trim();
+            if (!email) {
+                setStatus('Please enter the patient email.', 'error');
+                return;
+            }
+            sendButton.disabled = true;
+            setStatus('Sending confirmation...', '');
+            fetch("{% if appointment %}{% url 'appointment_notify' appointment.pk %}{% endif %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf.value
+                },
+                body: JSON.stringify({email: email})
+            })
+                .then(function (response) { return response.json().then(function (data) { return {ok: response.ok, data: data}; }); })
+                .then(function (result) {
+                    if (!result.ok || !result.data.success) {
+                        setStatus(result.data.error || 'Could not send confirmation.', 'error');
+                        return;
+                    }
+                    setStatus('Confirmation email requested successfully.', 'success');
+                })
+                .catch(function () {
+                    setStatus('Could not connect to the CRM notification endpoint.', 'error');
+                })
+                .finally(function () {
+                    sendButton.disabled = false;
+                });
+        });
+    })();
+</script>
 {% endblock %}

@@ -1,11 +1,14 @@
 import calendar
 import json
+import urllib.error
+import urllib.request
 from datetime import date, datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.http import JsonResponse
@@ -428,6 +431,58 @@ def api_available_slots(request):
 
 
 @login_required
+def api_appointment_day_schedule(request):
+    date_str = request.GET.get('date')
+    exclude_id = request.GET.get('exclude')
+    if not date_str:
+        return JsonResponse({'error': 'date parameter required'}, status=400)
+
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+    config = get_booking_config()
+    day_name = selected_date.strftime('%A').lower()
+    slots = split_slots(getattr(config, f'available_slots_{day_name}', ''))
+    appointments = Appointment.objects.select_related('patient').filter(date=selected_date).order_by('time')
+    if exclude_id:
+        appointments = appointments.exclude(pk=exclude_id)
+
+    appointments_by_time = {
+        f'{appointment.time.hour}:{appointment.time.minute:02d}': appointment
+        for appointment in appointments
+    }
+    schedule = []
+    for slot in slots:
+        normalized = normalize_time_slot(slot)
+        appointment = appointments_by_time.get(normalized)
+        display_time = datetime.strptime(normalized, '%H:%M').strftime('%I:%M %p')
+        schedule.append(
+            {
+                'time': normalized,
+                'display_time': display_time.lstrip('0'),
+                'available': appointment is None,
+                'appointment': {
+                    'id': appointment.pk,
+                    'patient_code': appointment.patient.patient_code,
+                    'patient_name': f'{appointment.patient.first_name} {appointment.patient.last_name}',
+                    'visit_type': appointment.get_visit_type_display(),
+                    'status': appointment.get_status_display(),
+                } if appointment else None,
+            }
+        )
+
+    return JsonResponse(
+        {
+            'date': date_str,
+            'day': selected_date.strftime('%A'),
+            'slots': schedule,
+        }
+    )
+
+
+@login_required
 def dashboard_view(request):
     today = timezone.localdate()
     today_appointments = Appointment.objects.select_related('patient').filter(date=today).order_by('time')
@@ -792,7 +847,11 @@ def appointment_list_view(request):
 
 @login_required
 def appointment_create_view(request):
-    form = AppointmentForm(request.POST or None)
+    initial = {}
+    patient_id = request.GET.get('patient')
+    if patient_id:
+        initial['patient'] = get_object_or_404(Patient, pk=patient_id)
+    form = AppointmentForm(request.POST or None, initial=initial)
     if request.method == 'POST' and form.is_valid():
         form.save()
         return redirect('appointments_calendar')
@@ -807,6 +866,70 @@ def appointment_update_view(request, pk):
         form.save()
         return redirect('appointments_calendar')
     return render(request, 'patients/appointment_form.html', {'form': form, 'form_title': 'Edit Appointment', 'appointment': appointment})
+
+
+@login_required
+def appointment_notify_view(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    appointment = get_object_or_404(Appointment.objects.select_related('patient'), pk=pk)
+    try:
+        body = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+    email = (body.get('email') or appointment.patient.email or '').strip()
+    if not email:
+        return JsonResponse({'success': False, 'error': 'Patient email is required.'}, status=400)
+
+    webhook_url = settings.N8N_APPOINTMENT_CONFIRMATION_WEBHOOK_URL
+    if not webhook_url:
+        return JsonResponse(
+            {'success': False, 'error': 'n8n webhook is not configured.'},
+            status=500,
+        )
+
+    if appointment.patient.email != email:
+        appointment.patient.email = email
+        appointment.patient.save(update_fields=['email'])
+
+    payload = {
+        'appointment_id': appointment.pk,
+        'patient_id': appointment.patient.pk,
+        'patient_code': appointment.patient.patient_code,
+        'patient_first_name': appointment.patient.first_name,
+        'patient_last_name': appointment.patient.last_name,
+        'patient_full_name': f'{appointment.patient.first_name} {appointment.patient.last_name}',
+        'patient_email': email,
+        'appointment_date': appointment.date.isoformat(),
+        'appointment_time': appointment.time.strftime('%I:%M %p'),
+        'visit_type': appointment.get_visit_type_display(),
+        'status': appointment.get_status_display(),
+    }
+
+    request_data = json.dumps(payload).encode('utf-8')
+    webhook_request = urllib.request.Request(
+        webhook_url,
+        data=request_data,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(webhook_request, timeout=12) as response:
+            response_body = response.read().decode('utf-8')
+    except urllib.error.HTTPError as exc:
+        return JsonResponse(
+            {'success': False, 'error': f'n8n returned HTTP {exc.code}.'},
+            status=502,
+        )
+    except urllib.error.URLError:
+        return JsonResponse(
+            {'success': False, 'error': 'Could not connect to n8n webhook.'},
+            status=502,
+        )
+
+    return JsonResponse({'success': True, 'message': 'Confirmation email requested.', 'n8n_response': response_body})
 
 
 @login_required
