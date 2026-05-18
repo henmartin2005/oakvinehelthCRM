@@ -1,20 +1,16 @@
 import calendar
 import json
-import urllib.error
-import urllib.request
 from datetime import date, datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
-from django.conf import settings
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.csrf import csrf_exempt
 
 from .forms import (
@@ -864,73 +860,14 @@ def appointment_update_view(request, pk):
     appointment = get_object_or_404(Appointment, pk=pk)
     form = AppointmentForm(request.POST or None, instance=appointment)
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        notification_fields = {'patient', 'date', 'time', 'visit_type', 'status'}
+        updated_appointment = form.save(commit=False)
+        if notification_fields.intersection(form.changed_data):
+            updated_appointment.notification_sent = False
+        updated_appointment.save()
+        form.save_m2m()
         return redirect('appointments_calendar')
     return render(request, 'patients/appointment_form.html', {'form': form, 'form_title': 'Edit Appointment', 'appointment': appointment})
-
-
-@login_required
-def appointment_notify_view(request, pk):
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
-
-    appointment = get_object_or_404(Appointment.objects.select_related('patient'), pk=pk)
-    try:
-        body = json.loads(request.body or '{}')
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
-
-    email = (body.get('email') or appointment.patient.email or '').strip()
-    if not email:
-        return JsonResponse({'success': False, 'error': 'Patient email is required.'}, status=400)
-
-    webhook_url = settings.N8N_APPOINTMENT_CONFIRMATION_WEBHOOK_URL
-    if not webhook_url:
-        return JsonResponse(
-            {'success': False, 'error': 'n8n webhook is not configured.'},
-            status=500,
-        )
-
-    if appointment.patient.email != email:
-        appointment.patient.email = email
-        appointment.patient.save(update_fields=['email'])
-
-    payload = {
-        'appointment_id': appointment.pk,
-        'patient_id': appointment.patient.pk,
-        'patient_code': appointment.patient.patient_code,
-        'patient_first_name': appointment.patient.first_name,
-        'patient_last_name': appointment.patient.last_name,
-        'patient_full_name': f'{appointment.patient.first_name} {appointment.patient.last_name}',
-        'patient_email': email,
-        'appointment_date': appointment.date.isoformat(),
-        'appointment_time': appointment.time.strftime('%I:%M %p'),
-        'visit_type': appointment.get_visit_type_display(),
-        'status': appointment.get_status_display(),
-    }
-
-    request_data = json.dumps(payload).encode('utf-8')
-    webhook_request = urllib.request.Request(
-        webhook_url,
-        data=request_data,
-        headers={'Content-Type': 'application/json'},
-        method='POST',
-    )
-    try:
-        with urllib.request.urlopen(webhook_request, timeout=12) as response:
-            response_body = response.read().decode('utf-8')
-    except urllib.error.HTTPError as exc:
-        return JsonResponse(
-            {'success': False, 'error': f'n8n returned HTTP {exc.code}.'},
-            status=502,
-        )
-    except urllib.error.URLError:
-        return JsonResponse(
-            {'success': False, 'error': 'Could not connect to n8n webhook.'},
-            status=502,
-        )
-
-    return JsonResponse({'success': True, 'message': 'Confirmation email requested.', 'n8n_response': response_body})
 
 
 @login_required
@@ -1257,7 +1194,19 @@ def n8n_pending_appointments(request):
             }
         )
 
-    if data:
-        Appointment.objects.filter(id__in=[item['id'] for item in data]).update(notification_sent=True)
-
     return JsonResponse({'count': len(data), 'appointments': data})
+
+
+@csrf_exempt
+def n8n_mark_appointment_notified(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'method not allowed'}, status=405)
+
+    token = request.GET.get('token', '')
+    if token != 'OAK_N8N_2026':
+        return JsonResponse({'error': 'unauthorized'}, status=401)
+
+    appointment = get_object_or_404(Appointment, pk=pk)
+    appointment.notification_sent = True
+    appointment.save(update_fields=['notification_sent'])
+    return JsonResponse({'success': True, 'appointment_id': appointment.pk, 'notification_sent': True})

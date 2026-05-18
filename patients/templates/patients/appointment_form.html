@@ -1,4 +1,4 @@
-{% extends "patients/base.html" %}
+﻿{% extends "patients/base.html" %}
 {% block title %}{{ form_title }} | Oak & Vine CRM{% endblock %}
 {% block page_title %}Appointments{% endblock %}
 {% block content %}
@@ -90,59 +90,56 @@
     .slot-detail { color: #1a1a2e; font-size: 12px; font-weight: 600; }
     .slot-meta { margin-top: 2px; color: #9ca3af; font-size: 11px; }
     .schedule-empty { padding: 16px; color: #9ca3af; font-size: 12px; }
-    .btn.btn-email-notify,
-    button.btn.btn-email-notify {
-        background: #16a34a;
-        border-color: #16a34a;
-        color: #ffffff;
+    .appointment-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
     }
-    .btn.btn-email-notify:hover,
-    button.btn.btn-email-notify:hover {
-        background: #15803d;
-        border-color: #15803d;
-        color: #ffffff;
+    .appointment-title-row h2 { margin: 0; }
+    .notification-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .4px;
+        text-transform: uppercase;
+        white-space: nowrap;
     }
-    .btn.btn-email-notify:disabled,
-    button.btn.btn-email-notify:disabled {
-        background: #16a34a;
-        border-color: #16a34a;
-        color: #ffffff;
-        opacity: .72;
-        cursor: not-allowed;
+    .notification-badge--pending {
+        background: #fee2e2;
+        border: 1px solid #fca5a5;
+        color: #b91c1c;
     }
-    .notify-modal {
-        position: fixed;
-        inset: 0;
-        display: none;
-        place-items: center;
-        padding: 20px;
-        background: rgba(26, 26, 46, .48);
-        z-index: 50;
+    .notification-badge--sent {
+        background: #dbeafe;
+        border: 1px solid #93c5fd;
+        color: #1d4ed8;
     }
-    .notify-modal.open { display: grid; }
-    .notify-dialog {
-        width: min(100%, 460px);
-        background: #ffffff;
-        border-radius: 12px;
-        box-shadow: 0 18px 45px rgba(26,26,46,.18);
-        padding: 20px;
-    }
-    .notify-dialog h3 { margin: 0 0 8px; font-size: 16px; color: #1a1a2e; }
-    .notify-dialog p { margin: 0 0 14px; color: #6b7280; font-size: 13px; line-height: 1.45; }
-    .notify-dialog label { display: block; margin-bottom: 6px; color: #6b7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
-    .notify-dialog input { width: 100%; border: 1px solid #ddd6fe; border-radius: 6px; padding: 9px 11px; font: inherit; font-size: 13px; }
-    .notify-status { min-height: 18px; margin-top: 10px; font-size: 12px; font-weight: 700; }
-    .notify-status.error { color: #dc2626; }
-    .notify-status.success { color: #15803d; }
-    .notify-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
     @media (max-width: 1000px) {
         .appointment-editor { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+        .appointment-title-row { align-items: flex-start; flex-direction: column; }
     }
 </style>
 <div class="appointment-editor">
     <form class="card form-card" method="post">
         {% csrf_token %}
-        <h2>{{ form_title }}</h2>
+        <div class="appointment-title-row">
+            <h2>{{ form_title }}</h2>
+            {% if appointment %}
+                {% if appointment.notification_sent %}
+                    <span class="notification-badge notification-badge--sent">Patient notified</span>
+                {% else %}
+                    <span class="notification-badge notification-badge--pending">Pending send email</span>
+                {% endif %}
+            {% endif %}
+        </div>
         <div class="form-grid">
             {% for field in form %}
                 <div class="field {% if field.name == 'notes' %}full{% endif %}">
@@ -162,7 +159,6 @@
             <div class="form-actions">
                 {% if appointment and appointment.patient_id %}
                     <a class="btn btn-outline-primary" href="/patients/{{ appointment.patient_id }}/edit/">Ir al perfil del paciente</a>
-                    <button class="btn btn-email-notify" type="button" id="openNotifyModal">✉ Notificar por email</button>
                 {% endif %}
                 <a class="btn btn-outline-muted" href="/appointments/">Cancel</a>
                 <button class="btn btn-primary" type="submit">Save Appointment</button>
@@ -180,21 +176,6 @@
         </div>
     </aside>
 </div>
-{% if appointment and appointment.patient_id %}
-    <div class="notify-modal" id="notifyModal" role="dialog" aria-modal="true" aria-labelledby="notifyTitle">
-        <div class="notify-dialog">
-            <h3 id="notifyTitle">Notificar cita por email</h3>
-            <p>Se enviará la confirmación de la cita a través de n8n con los datos del paciente y appointment.</p>
-            <label for="notifyEmail">Patient email</label>
-            <input id="notifyEmail" type="email" value="{{ appointment.patient.email|default:'' }}" placeholder="patient@email.com">
-            <div class="notify-status" id="notifyStatus"></div>
-            <div class="notify-actions">
-                <button class="btn btn-outline-muted" type="button" id="closeNotifyModal">Cancel</button>
-                <button class="btn btn-email-notify" type="button" id="sendNotifyEmail">✉ Send confirmation</button>
-            </div>
-        </div>
-    </div>
-{% endif %}
 <script>
     (function () {
         var search = document.getElementById('patientSearch');
@@ -294,61 +275,6 @@
         loadSchedule();
     })();
 
-    (function () {
-        var modal = document.getElementById('notifyModal');
-        var openButton = document.getElementById('openNotifyModal');
-        var closeButton = document.getElementById('closeNotifyModal');
-        var sendButton = document.getElementById('sendNotifyEmail');
-        var emailInput = document.getElementById('notifyEmail');
-        var status = document.getElementById('notifyStatus');
-        var csrf = document.querySelector('input[name="csrfmiddlewaretoken"]');
-        if (!modal || !openButton || !sendButton || !emailInput || !csrf) { return; }
-
-        function setStatus(message, type) {
-            status.textContent = message || '';
-            status.className = 'notify-status ' + (type || '');
-        }
-
-        openButton.addEventListener('click', function () {
-            setStatus('', '');
-            modal.classList.add('open');
-            emailInput.focus();
-        });
-        closeButton.addEventListener('click', function () { modal.classList.remove('open'); });
-        modal.addEventListener('click', function (event) {
-            if (event.target === modal) { modal.classList.remove('open'); }
-        });
-        sendButton.addEventListener('click', function () {
-            var email = emailInput.value.trim();
-            if (!email) {
-                setStatus('Please enter the patient email.', 'error');
-                return;
-            }
-            sendButton.disabled = true;
-            setStatus('Sending confirmation...', '');
-            fetch("{% if appointment %}{% url 'appointment_notify' appointment.pk %}{% endif %}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrf.value
-                },
-                body: JSON.stringify({email: email})
-            })
-                .then(function (response) { return response.json().then(function (data) { return {ok: response.ok, data: data}; }); })
-                .then(function (result) {
-                    if (!result.ok || !result.data.success) {
-                        setStatus(result.data.error || 'Could not send confirmation.', 'error');
-                        return;
-                    }
-                    setStatus('Confirmation email requested successfully.', 'success');
-                })
-                .catch(function () {
-                    setStatus('Could not connect to the CRM notification endpoint.', 'error');
-                })
-                .finally(function () {
-                    sendButton.disabled = false;
-                });
-        });
-    })();
 </script>
 {% endblock %}
+
